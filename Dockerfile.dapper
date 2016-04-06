@@ -1,0 +1,30 @@
+FROM rancher/dind:v1.10.3-rancher1
+
+RUN \
+  mkdir -p /goroot && \
+  curl https://storage.googleapis.com/golang/go1.6.linux-amd64.tar.gz | tar xvzf - -C /goroot --strip-components=1
+
+ENV GOROOT /goroot
+ENV GOPATH /go
+ENV PATH $GOROOT/bin:$GOPATH/bin:$PATH
+
+
+RUN go get github.com/imikushin/trash
+RUN go get github.com/golang/lint/golint
+RUN curl -sL https://get.docker.com/builds/Linux/x86_64/docker-1.10.3 > /usr/bin/docker && \
+    chmod +x /usr/bin/docker
+
+
+ENV PATH /go/bin:$PATH
+ENV DAPPER_SOURCE /go/src/github.com/rancher/docker-longhorn-driver
+ENV DAPPER_OUTPUT bin
+ENV DAPPER_DOCKER_SOCKET true
+ENV DAPPER_ENV TAG REPO
+ENV DAPPER_RUN_ARGS="--privileged"
+ENV DOCKER_TEST_SOCKET="/var/run/dockertest.sock"
+ENV GO15VENDOREXPERIMENT 1
+ENV TRASH_CACHE ${DAPPER_SOURCE}/.trash-cache
+ENV DOCKER_DAEMON_ARGS="-H unix:///var/run/dockertest.sock"
+WORKDIR ${DAPPER_SOURCE}
+ENTRYPOINT ["./scripts/entry"]
+CMD ["ci"]

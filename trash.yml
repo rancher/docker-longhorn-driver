@@ -1,0 +1,65 @@
+import:
+- package: github.com/Sirupsen/logrus
+  version: v0.10.0
+
+- package: github.com/gorilla/mux
+  version: v1.1
+
+- package: github.com/gorilla/context
+  version: 1ea25387ff6f684839d82767c1733ff4d4d15d0a
+
+- package: github.com/docker/go-plugins-helpers
+  version: 7945ace0aa5cd39b512c5f3cf30ef6e55f5cc0fc
+
+- package: github.com/docker/go-connections/sockets
+  version: v0.2.0
+
+- package: github.com/docker/docker
+  version: v1.10.3
+
+- package: github.com/coreos/go-systemd/util
+  version: v4
+
+- package: github.com/coreos/go-systemd/activation
+  version: v4
+
+- package: github.com/docker/distribution/registry
+  version: master
+
+- package: github.com/docker/go-units
+  version: master
+
+- package: github.com/opencontainers/runc/libcontainer/user
+  version: master
+
+- package: golang.org/x/net/proxy
+  version: master
+
+- package: gopkg.in/check.v1
+  version: v1
+
+- package: github.com/fsouza/go-dockerclient
+  version: 98829062f36e94bc8c31a1c9a8b087b90f9d2d9c
+
+# TODO Update to upstream repo once PRs are merged
+- package: github.com/rancher/go-rancher
+  repo:    https://github.com/cjellick/go-rancher.git
+  version: volAccMode
+
+- package: github.com/gorilla/websocket
+  version: e2e3d8414d0fbae04004f151979f4e27c6747fe7
+
+- package: github.com/rancher/go-rancher-metadata
+  version: 802039712650f3d2035179ec6c416093e58efa29
+
+- package: github.com/codegangsta/cli
+  version: v1.2.0
+
+- package: github.com/rancher/kubernetes-agent/healthcheck
+  version: v0.1.0
+
+- package: github.com/rancher/go-machine-service
+  version: v0.29.2
+
+- package: github.com/mitchellh/mapstructure
+  version: d2dd0262208475919e1a362f675cfc0e7c10e905
