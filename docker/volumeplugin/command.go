@@ -31,7 +31,7 @@ func start(c *cli.Context) {
 		logrus.Fatalf("Failed to establish connection to Rancher server")
 	}
 
-	md, err := util.MetadataConfig(c.GlobalString("metadata-url"))
+	md, err := util.GetMetadataConfig(c.GlobalString("metadata-url"))
 	if err != nil {
 		logrus.Fatalf("Unable to get metadata: %v", err)
 	}
@@ -41,13 +41,13 @@ func start(c *cli.Context) {
 		logrus.Fatalf("Couldn't mount /dev: %v", err)
 	}
 
-	sockAddr := fmt.Sprintf("unix://%v", util.ConstructSocketNameOnHost(md["driverName"]))
-	err = ioutil.WriteFile(fmt.Sprintf("/etc/docker/plugins/%v.spec", md["driverName"]), []byte(sockAddr), 0644)
+	sockAddr := fmt.Sprintf("unix://%v", util.ConstructSocketNameOnHost(md.DriverName))
+	err = ioutil.WriteFile(fmt.Sprintf("/etc/docker/plugins/%v.spec", md.DriverName), []byte(sockAddr), 0644)
 	if err != nil {
 		logrus.Fatalf("Unable to write spec file: %v", err)
 	}
 
-	sd, err := driver.NewStorageDaemon(md["containerName"], md["driverName"], client)
+	sd, err := driver.NewStorageDaemon(md.ContainerName, md.DriverName, md.Image, client)
 	if err != nil {
 		logrus.Fatalf("Error creating storage daemon: %v", err)
 	}
@@ -59,7 +59,7 @@ func start(c *cli.Context) {
 
 	d := NewRancherStorageDriver(sd)
 	h := volume.NewHandler(d)
-	err = h.ServeUnix("root", util.ConstructSocketNameInContainer(md["driverName"]))
+	err = h.ServeUnix("root", util.ConstructSocketNameInContainer(md.DriverName))
 	if err != nil {
 		logrus.Fatalf("Volume server returned with error: %v", err)
 	}

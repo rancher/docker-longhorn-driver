@@ -24,6 +24,7 @@ const (
 	composeVolumeName      = "VOLUME_NAME"
 	composeVolumeSize      = "VOLUME_SIZE"
 	composeDriverContainer = "LONGHORN_DRIVER_CONTAINER"
+	composeLonghornImage   = "LONGHORN_IMAGE"
 	devDir                 = "/dev/longhorn/%s"
 	root                   = "/var/lib/rancher/longhorn"
 	mountsDir              = "mounts"
@@ -44,7 +45,7 @@ type VolumeManager interface {
 	Unmount(name string) error
 }
 
-func NewStorageDaemon(daemonContainerName, driverName string, client *rancherClient.RancherClient) (*StorageDaemon, error) {
+func NewStorageDaemon(daemonContainerName, driverName, image string, client *rancherClient.RancherClient) (*StorageDaemon, error) {
 	metadata := md.NewClient(rancherMetadataURL)
 
 	if err := os.MkdirAll(filepath.Join(root, localCacheDir), 0744); err != nil {
@@ -62,6 +63,7 @@ func NewStorageDaemon(daemonContainerName, driverName string, client *rancherCli
 		client:              client,
 		metadata:            metadata,
 		store:               volumeStore,
+		image:               image,
 	}
 
 	return sd, nil
@@ -75,6 +77,7 @@ type StorageDaemon struct {
 	daemonContainerName string
 	driverName          string
 	hostUUID            string
+	image               string
 }
 
 func (d *StorageDaemon) ListenAndServe() error {
@@ -134,7 +137,7 @@ func (d *StorageDaemon) Create(volume *model.Volume) (*model.Volume, error) {
 		size = defaultVolumeSize
 	}
 
-	stack := d.Stack(volume.Name, d.driverName, d.daemonContainerName, size)
+	stack := d.Stack(volume.Name, d.driverName, d.daemonContainerName, d.image, size)
 
 	if err := d.doCreateVolume(volume, stack); err != nil {
 		stack.Delete()
@@ -181,7 +184,7 @@ func (d *StorageDaemon) doCreateVolume(volume *model.Volume, stack *Stack) error
 func (d *StorageDaemon) Delete(name string, removeStack bool) error {
 	// This delete is a simple operation that just removes the volume from the local cache
 	logrus.Infof("Deleting volume %v", name)
-	stack := d.Stack(name, d.driverName, d.daemonContainerName, "0")
+	stack := d.Stack(name, d.driverName, d.daemonContainerName, d.image, "0")
 	if err := stack.Delete(); err != nil {
 		return err
 	}
@@ -319,8 +322,9 @@ func waitForDevice(dev string) error {
 	return err
 }
 
-func (d *StorageDaemon) Stack(volumeName, driverName, daemonContainerName string, size string) *Stack {
+func (d *StorageDaemon) Stack(volumeName, driverName, daemonContainerName, image string, size string) *Stack {
 	env := map[string]interface{}{
+		composeLonghornImage:   image,
 		composeVolumeName:      volumeName,
 		composeVolumeSize:      size,
 		composeDriverContainer: daemonContainerName,

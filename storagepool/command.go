@@ -28,7 +28,7 @@ func start(c *cli.Context) {
 	}
 
 	metadataUrl := c.GlobalString("metadata-url")
-	md, err := util.MetadataConfig(metadataUrl)
+	md, err := util.GetMetadataConfig(metadataUrl)
 	if err != nil {
 		logrus.Fatalf("Unable to get metadata: %v", err)
 	}
@@ -36,13 +36,13 @@ func start(c *cli.Context) {
 	resultChan := make(chan error)
 
 	go func(rc chan error) {
-		storagePoolAgent := NewStoragepoolAgent(healthCheckInterval, md["driverName"], cattleClient)
+		storagePoolAgent := NewStoragepoolAgent(healthCheckInterval, md.DriverName, cattleClient)
 		err := storagePoolAgent.Run(metadataUrl)
 		logrus.Errorf("Error while running storage pool agent [%v]", err)
 		rc <- err
 	}(resultChan)
 
-	socket := util.ConstructSocketNameInContainer(md["driverName"])
+	socket := util.ConstructSocketNameInContainer(md.DriverName)
 	go func(rc chan error) {
 		conf := cattleevents.Config{
 			CattleURL:       cattleUrl,

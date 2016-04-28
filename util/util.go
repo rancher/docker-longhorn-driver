@@ -15,24 +15,38 @@ var (
 	cmdTimeout time.Duration = time.Minute // one minute by default
 )
 
-func MetadataConfig(metadataUrl string) (map[string]string, error) {
-	config := map[string]string{}
+type MetadataConfig struct {
+	DriverName    string
+	Image         string
+	ContainerName string
+}
+
+func GetMetadataConfig(metadataUrl string) (MetadataConfig, error) {
+	config := MetadataConfig{}
 	client, err := metadata.NewClientAndWait(metadataUrl)
 	if err != nil {
-		return nil, err
+		return config, err
 	}
 
 	stack, err := client.GetSelfStack()
 	if err != nil {
-		return nil, err
+		return config, err
 	}
-	config["driverName"] = stack.Name
+	config.DriverName = stack.Name
+
+	svc, err := client.GetSelfService()
+	if err != nil {
+		return config, err
+	}
+	if image, ok := svc.Metadata["LONGHORN_IMAGE"]; ok {
+		config.Image = fmt.Sprintf("%v", image)
+	}
 
 	c, err := client.GetSelfContainer()
 	if err != nil {
-		return nil, err
+		return config, err
 	}
-	config["containerName"] = c.UUID
+	config.ContainerName = c.UUID
 
 	return config, nil
 }

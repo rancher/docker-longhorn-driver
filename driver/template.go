@@ -4,7 +4,7 @@ const (
 	DockerComposeTemplate = `
 replica:
     scale: 2
-    image: cjellick/longhorn:dev
+    image: $LONGHORN_IMAGE
     command:
     - launch
     - replica
@@ -35,7 +35,7 @@ replica:
             quorum: 1
 
 sync-agent:
-    image: cjellick/longhorn:dev
+    image: $LONGHORN_IMAGE
     net: container:replica
     working_dir: /var/lib/rancher/longhorn/$VOLUME_NAME
     volumes_from:
@@ -47,7 +47,7 @@ sync-agent:
     - 0.0.0.0:9504
 
 replica-agent:
-    image: cjellick/longhorn:dev
+    image: $LONGHORN_IMAGE
     net: container:replica
     metadata:
         longhorn:
@@ -58,7 +58,7 @@ replica-agent:
     - --replica
 
 controller:
-    image: cjellick/longhorn:dev
+    image: $LONGHORN_IMAGE
     command:
     - launch
     - controller
@@ -88,7 +88,7 @@ controller:
         unhealthy_threshold: 2
 
 controller-agent:
-    image: cjellick/longhorn:dev
+    image: $LONGHORN_IMAGE
     net: container:controller
     metadata:
         longhorn:
