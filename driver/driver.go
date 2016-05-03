@@ -184,9 +184,11 @@ func (d *StorageDaemon) doCreateVolume(volume *model.Volume, stack *Stack) error
 func (d *StorageDaemon) Delete(name string, removeStack bool) error {
 	// This delete is a simple operation that just removes the volume from the local cache
 	logrus.Infof("Deleting volume %v", name)
-	stack := d.Stack(name, d.driverName, d.daemonContainerName, d.image, "0")
-	if err := stack.Delete(); err != nil {
-		return err
+	if removeStack {
+		stack := d.Stack(name, d.driverName, d.daemonContainerName, d.image, "0")
+		if err := stack.Delete(); err != nil {
+			return err
+		}
 	}
 	d.store.delete(name)
 	return nil
