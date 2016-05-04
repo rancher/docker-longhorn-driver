@@ -11,7 +11,7 @@ replica:
     volumes:
     - /var/lib/rancher/longhorn/$VOLUME_NAME
     labels:
-        io.rancher.sidekicks: replica-agent, sync-agent
+        io.rancher.sidekicks: replica-healthcheck, sync-agent
         io.rancher.container.hostname_override: container_name
         io.rancher.scheduler.affinity:container_label_ne: io.rancher.stack_service.name=$${stack_name}/$${service_name}
         io.rancher.scheduler.affinity:container_soft: $LONGHORN_DRIVER_CONTAINER
@@ -21,11 +21,13 @@ replica:
             volume_size: $VOLUME_SIZE
     health_check:
         healthy_threshold: 1
-        unhealthy_threshold: 3
+        unhealthy_threshold: 4
         interval: 5000
         port: 8199
         request_line: GET /replica/status HTTP/1.0
         response_timeout: 50000
+        initializing_timeout: 10000
+        reinitializing_timeout: 20000
         strategy: recreateOnQuorum
         recreate_on_quorum_strategy_config:
             quorum: 1
@@ -42,7 +44,7 @@ sync-agent:
     - --listen
     - 0.0.0.0:9504
 
-replica-agent:
+replica-healthcheck:
     image: $LONGHORN_IMAGE
     net: container:replica
     metadata:
@@ -76,12 +78,12 @@ controller:
           volume_name: $VOLUME_NAME
     health_check:
         healthy_threshold: 1
+        unhealthy_threshold: 2
         interval: 5000
         port: 8199
         request_line: GET /controller/status HTTP/1.0
         response_timeout: 5000
         strategy: none
-        unhealthy_threshold: 2
 
 controller-agent:
     image: $LONGHORN_IMAGE
