@@ -21,19 +21,16 @@ import (
 )
 
 const (
-	composeVolumeName      = "VOLUME_NAME"
-	composeVolumeSize      = "VOLUME_SIZE"
-	composeDriverContainer = "LONGHORN_DRIVER_CONTAINER"
-	composeLonghornImage   = "LONGHORN_IMAGE"
-	devDir                 = "/dev/longhorn/%s"
-	root                   = "/var/lib/rancher/longhorn"
-	mountsDir              = "mounts"
-	localCacheDir          = "localcache"
-	mountBin               = "mount"
-	umountBin              = "umount"
-	rancherMetadataURL     = "http://rancher-metadata/2015-12-19"
-	volumeStackPrefix      = "longhorn-vol-"
-	defaultVolumeSize      = "10737418240" // 10 gb
+	devDir             = "/dev/longhorn/%s"
+	root               = "/var/lib/rancher/longhorn"
+	mountsDir          = "mounts"
+	localCacheDir      = "localcache"
+	mountBin           = "mount"
+	umountBin          = "umount"
+	rancherMetadataURL = "http://rancher-metadata/2015-12-19"
+	volumeStackPrefix  = "longhorn-vol-"
+	defaultVolumeSize  = "10737418240" // 10 gb
+	optSize            = "size"
 )
 
 type VolumeManager interface {
@@ -45,7 +42,7 @@ type VolumeManager interface {
 	Unmount(name string) error
 }
 
-func NewStorageDaemon(daemonContainerName, driverName, image string, client *rancherClient.RancherClient) (*StorageDaemon, error) {
+func NewStorageDaemon(driverContainerName, driverName, image string, client *rancherClient.RancherClient) (*StorageDaemon, error) {
 	metadata := md.NewClient(rancherMetadataURL)
 
 	if err := os.MkdirAll(filepath.Join(root, localCacheDir), 0744); err != nil {
@@ -58,7 +55,7 @@ func NewStorageDaemon(daemonContainerName, driverName, image string, client *ran
 	}
 
 	sd := &StorageDaemon{
-		daemonContainerName: daemonContainerName,
+		driverContainerName: driverContainerName,
 		driverName:          driverName,
 		client:              client,
 		metadata:            metadata,
@@ -74,7 +71,7 @@ type StorageDaemon struct {
 	client              *rancherClient.RancherClient
 	metadata            *md.Client
 	store               *volumeStore
-	daemonContainerName string
+	driverContainerName string
 	driverName          string
 	hostUUID            string
 	image               string
@@ -126,7 +123,7 @@ func (d *StorageDaemon) Create(volume *model.Volume) (*model.Volume, error) {
 	logrus.Infof("Creating volume %v", volume)
 	d.store.create(volume.Name)
 
-	sizeStr := volume.Opts["size"]
+	sizeStr := volume.Opts[optSize]
 	var size string
 	if sizeStr == "" {
 		size = defaultVolumeSize
@@ -137,26 +134,26 @@ func (d *StorageDaemon) Create(volume *model.Volume) (*model.Volume, error) {
 		size = defaultVolumeSize
 	}
 
-	stack := d.Stack(volume.Name, d.driverName, d.daemonContainerName, d.image, size)
+	stack := newStack(volume.Name, d.driverName, d.driverContainerName, d.image, size, d.client)
 
 	if err := d.doCreateVolume(volume, stack); err != nil {
-		stack.Delete()
+		stack.delete()
 		return nil, fmt.Errorf("Error creating Rancher stack for volume %v: %v.", volume.Name, err)
 	}
 
 	return volume, nil
 }
 
-func (d *StorageDaemon) doCreateVolume(volume *model.Volume, stack *Stack) error {
+func (d *StorageDaemon) doCreateVolume(volume *model.Volume, stack *stack) error {
 	// Doing find just to see if we are creating versus using an existing stack
-	env, err := stack.Find()
+	env, err := stack.find()
 	if err != nil {
 		return err
 	}
 	logrus.Infof("Found %v", env)
 
 	// Always run create because it also ensures that things are active
-	if _, err := stack.Create(); err != nil {
+	if _, err := stack.create(); err != nil {
 		return err
 	}
 
@@ -173,8 +170,8 @@ func (d *StorageDaemon) doCreateVolume(volume *model.Volume, stack *Stack) error
 		}
 	}
 
-	if err := stack.MoveController(); err != nil {
-		logrus.Errorf("Failed to move controller to %v: %v", d.daemonContainerName, err)
+	if err := stack.moveController(); err != nil {
+		logrus.Errorf("Failed to move controller to %v: %v", d.driverContainerName, err)
 		return err
 	}
 
@@ -185,8 +182,8 @@ func (d *StorageDaemon) Delete(name string, removeStack bool) error {
 	// This delete is a simple operation that just removes the volume from the local cache
 	logrus.Infof("Deleting volume %v", name)
 	if removeStack {
-		stack := d.Stack(name, d.driverName, d.daemonContainerName, d.image, "0")
-		if err := stack.Delete(); err != nil {
+		stack := newStack(name, d.driverName, d.driverContainerName, d.image, "0", d.client)
+		if err := stack.delete(); err != nil {
 			return err
 		}
 	}
@@ -322,24 +319,6 @@ func waitForDevice(dev string) error {
 		return false, nil
 	})
 	return err
-}
-
-func (d *StorageDaemon) Stack(volumeName, driverName, daemonContainerName, image string, size string) *Stack {
-	env := map[string]interface{}{
-		composeLonghornImage:   image,
-		composeVolumeName:      volumeName,
-		composeVolumeSize:      size,
-		composeDriverContainer: daemonContainerName,
-	}
-
-	return &Stack{
-		Client:        d.client,
-		Name:          volumeStackPrefix + strings.Replace(volumeName, "_", "-", -1),
-		ExternalId:    "system://longhorn?name=" + volumeName,
-		Template:      DockerComposeTemplate,
-		Environment:   env,
-		ContainerName: daemonContainerName,
-	}
 }
 
 type volumeStore struct {
