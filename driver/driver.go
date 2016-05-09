@@ -1,36 +1,41 @@
 package driver
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/gorilla/mux"
+	"github.com/mitchellh/mapstructure"
 
 	md "github.com/rancher/go-rancher-metadata/metadata"
 	rancherClient "github.com/rancher/go-rancher/client"
 
 	"github.com/rancher/docker-longhorn-driver/model"
 	"github.com/rancher/docker-longhorn-driver/util"
-	"net/http"
 )
 
 const (
-	devDir             = "/dev/longhorn/%s"
-	root               = "/var/lib/rancher/longhorn"
-	mountsDir          = "mounts"
-	localCacheDir      = "localcache"
-	mountBin           = "mount"
-	umountBin          = "umount"
-	rancherMetadataURL = "http://rancher-metadata/2015-12-19"
-	volumeStackPrefix  = "longhorn-vol-"
-	defaultVolumeSize  = "10737418240" // 10 gb
-	optSize            = "size"
+	root                = "/var/lib/rancher/longhorn"
+	mountsDir           = "mounts"
+	fakeMountsDir       = "fake-mounts"
+	localCacheDir       = "localcache"
+	mountBin            = "mount"
+	umountBin           = "umount"
+	rancherMetadataURL  = "http://rancher-metadata/2015-12-19"
+	volumeStackPrefix   = "volume-"
+	defaultVolumeSize   = "10g"
+	optSize             = "size"
+	optReplicaBaseImage = "base-image"
+	optDontFormat       = "dont-format"
 )
 
 type VolumeManager interface {
@@ -42,7 +47,7 @@ type VolumeManager interface {
 	Unmount(name string) error
 }
 
-func NewStorageDaemon(driverContainerName, driverName, image string, client *rancherClient.RancherClient) (*StorageDaemon, error) {
+func NewStorageDaemon(driverContainerName, driverName, volumeStackImage string, client *rancherClient.RancherClient) (*StorageDaemon, error) {
 	metadata := md.NewClient(rancherMetadataURL)
 
 	if err := os.MkdirAll(filepath.Join(root, localCacheDir), 0744); err != nil {
@@ -52,6 +57,7 @@ func NewStorageDaemon(driverContainerName, driverName, image string, client *ran
 	volumeStore := &volumeStore{
 		mutex:    &sync.RWMutex{},
 		metadata: metadata,
+		rootDir:  root,
 	}
 
 	sd := &StorageDaemon{
@@ -60,7 +66,8 @@ func NewStorageDaemon(driverContainerName, driverName, image string, client *ran
 		client:              client,
 		metadata:            metadata,
 		store:               volumeStore,
-		image:               image,
+		volumeStackImage:    volumeStackImage,
+		rootDir:             root,
 	}
 
 	return sd, nil
@@ -74,7 +81,8 @@ type StorageDaemon struct {
 	driverContainerName string
 	driverName          string
 	hostUUID            string
-	image               string
+	volumeStackImage    string
+	rootDir             string
 }
 
 func (d *StorageDaemon) ListenAndServe() error {
@@ -108,7 +116,7 @@ func (d *StorageDaemon) List() ([]*model.Volume, error) {
 
 func (d *StorageDaemon) Get(name string) (*model.Volume, error) {
 	logrus.Infof("Getting volume %v", name)
-	vol, moved, err := d.store.get(name)
+	vol, _, moved, err := d.store.get(name)
 
 	if moved {
 		vol.Mountpoint = "moved"
@@ -126,15 +134,23 @@ func (d *StorageDaemon) Create(volume *model.Volume) (*model.Volume, error) {
 	sizeStr := volume.Opts[optSize]
 	var size string
 	if sizeStr == "" {
-		size = defaultVolumeSize
+		sizeStr = defaultVolumeSize
+		logrus.Infof("No size option provided. Using default: %v", defaultVolumeSize)
 	}
-	size, err := util.ParseSize(sizeStr)
+	size, sizeGB, err := util.ParseSize(sizeStr)
 	if err != nil {
-		logrus.Warnf("Can't parse size %v. Using default %v", sizeStr, defaultVolumeSize)
-		size = defaultVolumeSize
+		return nil, fmt.Errorf("Can't parse size %v. Error: %v", sizeStr, err)
 	}
 
-	stack := newStack(volume.Name, d.driverName, d.driverContainerName, d.image, size, d.client)
+	dontFormat, _ := strconv.ParseBool(volume.Opts[optDontFormat])
+	volConfig := volumeConfig{
+		Name:             volume.Name,
+		Size:             size,
+		SizeGB:           sizeGB,
+		ReplicaBaseImage: volume.Opts[optReplicaBaseImage],
+		DontFormat:       dontFormat,
+	}
+	stack := newStack(volume.Name, d.driverContainerName, d.driverName, d.volumeStackImage, volConfig, d.client)
 
 	if err := d.doCreateVolume(volume, stack); err != nil {
 		stack.delete()
@@ -159,14 +175,18 @@ func (d *StorageDaemon) doCreateVolume(volume *model.Volume, stack *stack) error
 
 	// If env was nil then we created stack so we need to format
 	if env == nil {
-		dev, _ := getDevice(volume.Name)
+		dev := getDevice(volume.Name)
 		if err := waitForDevice(dev); err != nil {
 			return err
 		}
 
-		logrus.Infof("Formatting volume %v - %v", volume.Name, dev)
-		if _, err := util.Execute("mkfs.ext4", []string{"-F", dev}); err != nil {
-			return err
+		if stack.volumeConfig.DontFormat {
+			logrus.Infof("Skipping formatting for volume %v.", volume.Name)
+		} else {
+			logrus.Infof("Formatting volume %v - %v", volume.Name, dev)
+			if _, err := util.Execute("mkfs.ext4", []string{"-F", dev}); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -182,7 +202,7 @@ func (d *StorageDaemon) Delete(name string, removeStack bool) error {
 	// This delete is a simple operation that just removes the volume from the local cache
 	logrus.Infof("Deleting volume %v", name)
 	if removeStack {
-		stack := newStack(name, d.driverName, d.driverContainerName, d.image, "0", d.client)
+		stack := newStack(name, d.driverContainerName, d.driverName, d.volumeStackImage, volumeConfig{}, d.client)
 		if err := stack.delete(); err != nil {
 			return err
 		}
@@ -194,7 +214,10 @@ func (d *StorageDaemon) Delete(name string, removeStack bool) error {
 func (d *StorageDaemon) Mount(name string) (*model.Volume, error) {
 	logrus.Infof("Mounting volume %v", name)
 
-	vol, moved, err := d.store.get(name)
+	vol, config, moved, err := d.store.get(name)
+	if err != nil {
+		return nil, fmt.Errorf("Error getting volume: %v", err)
+	}
 	if vol == nil {
 		return nil, fmt.Errorf("No such volume: %v", name)
 	}
@@ -203,7 +226,7 @@ func (d *StorageDaemon) Mount(name string) (*model.Volume, error) {
 		return nil, fmt.Errorf("Volume %v no longer reside on this host and cannot be mounted.", name)
 	}
 
-	dev, err := getDevice(vol.Name)
+	dev := getDevice(vol.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -212,19 +235,29 @@ func (d *StorageDaemon) Mount(name string) (*model.Volume, error) {
 		return nil, err
 	}
 
-	mountPoint, err := volumeMount(vol)
-	if err != nil {
-		return nil, err
+	var mp string
+	var e error
+	if config.DontFormat {
+		logrus.Infof("Creating fake mount directory for %v because dont-format option was specified.", vol.Name)
+		mp = fakeMountPoint(d.rootDir, vol.Name)
+		if err := os.MkdirAll(mp, 0744); err != nil {
+			return nil, err
+		}
+	} else {
+		mp, e = d.volumeMount(vol)
+		if e != nil {
+			return nil, e
+		}
 	}
 
-	vol.Mountpoint = mountPoint
+	vol.Mountpoint = mp
 	return vol, nil
 }
 
 func (d *StorageDaemon) Unmount(name string) error {
 	logrus.Infof("Unmounting volume %v", name)
 
-	vol, moved, err := d.store.get(name)
+	vol, config, moved, err := d.store.get(name)
 	if err != nil {
 		return fmt.Errorf("Error getting volume %v for unmount: %v.", vol, err)
 	}
@@ -235,7 +268,16 @@ func (d *StorageDaemon) Unmount(name string) error {
 		return nil
 	}
 
-	mountPoint := mountPoint(vol.Name)
+	if config.DontFormat {
+		logrus.Infof("Remvoing fake mount dir for %v because dont-format option was specified.", name)
+		mp := fakeMountPoint(d.rootDir, name)
+		if err := os.Remove(mp); err != nil {
+			logrus.Warnf("Cannot cleanup fake mount point directory %v due to %v.", mp, err)
+		}
+		return nil
+	}
+
+	mountPoint := mountPoint(d.rootDir, vol.Name)
 	if mountPoint == "" {
 		logrus.Infof("Umount called on umounted volume %v.", vol.Name)
 		return nil
@@ -252,20 +294,17 @@ func (d *StorageDaemon) Unmount(name string) error {
 	return nil
 }
 
-func volumeMount(volume *model.Volume) (string, error) {
-	dev, err := getDevice(volume.Name)
-	if err != nil {
-		return "", err
-	}
+func (d *StorageDaemon) volumeMount(volume *model.Volume) (string, error) {
+	dev := getDevice(volume.Name)
 
-	mountPoint := mountPoint(volume.Name)
+	mountPoint := mountPoint(d.rootDir, volume.Name)
 	if err := os.MkdirAll(mountPoint, 0744); err != nil {
 		return "", err
 	}
 
 	if !isMounted(mountPoint) {
 		logrus.Infof("Mounting volume %v to %v.", volume.Name, mountPoint)
-		_, err = callMount([]string{dev, mountPoint})
+		_, err := callMount([]string{dev, mountPoint})
 		if err != nil {
 			return "", err
 		}
@@ -303,12 +342,16 @@ func isMounted(mountPoint string) bool {
 	return false
 }
 
-func mountPoint(volumeName string) string {
-	return filepath.Join(root, mountsDir, volumeName)
+func mountPoint(rootDir, volumeName string) string {
+	return filepath.Join(rootDir, mountsDir, volumeName)
 }
 
-func getDevice(volumeName string) (string, error) {
-	return fmt.Sprintf(devDir, volumeName), nil
+func fakeMountPoint(rootDir, volumeName string) string {
+	return filepath.Join(rootDir, fakeMountsDir, volumeName)
+}
+
+func getDevice(volumeName string) string {
+	return filepath.Join(util.DevDir, volumeName)
 }
 
 func waitForDevice(dev string) error {
@@ -325,12 +368,13 @@ type volumeStore struct {
 	mutex    *sync.RWMutex
 	metadata *md.Client
 	hostUUID string
+	rootDir  string
 }
 
 func (s *volumeStore) create(name string) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	file := filepath.Join(root, localCacheDir, name)
+	file := filepath.Join(s.rootDir, localCacheDir, name)
 	if err := ioutil.WriteFile(file, []byte{}, 0644); err != nil {
 		return fmt.Errorf("Couldn't write local cache record for %v. Error: %v", name, err)
 	}
@@ -341,7 +385,7 @@ func (s *volumeStore) delete(name string) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	file := filepath.Join(root, localCacheDir, name)
+	file := filepath.Join(s.rootDir, localCacheDir, name)
 	if err := os.Remove(file); err != nil {
 		return fmt.Errorf("Couldn't remove local cache record for %v. Error: %v", name, err)
 	}
@@ -350,21 +394,21 @@ func (s *volumeStore) delete(name string) error {
 
 // Return values are the volume, a boolean `moved` whose value is true if the volume has been moved to a different
 // host, and an error
-func (s *volumeStore) get(name string) (*model.Volume, bool, error) {
+func (s *volumeStore) get(name string) (*model.Volume, volumeConfig, bool, error) {
 	s.mutex.RLock()
 
 	volumes, err := s.getVolumesFromRancher()
 	if err != nil {
 		s.mutex.RUnlock()
-		return nil, false, fmt.Errorf("Couldn't obtain list of volumes from Rancher. Error: %v", err)
+		return nil, volumeConfig{}, false, fmt.Errorf("Couldn't obtain list of volumes from Rancher. Error: %v", err)
 	}
 
-	_, inRancher := volumes[name]
+	config, inRancher := volumes[name]
 
 	localCache, err := s.getVolumesInLocalCache()
 	if err != nil {
 		s.mutex.RUnlock()
-		return nil, false, fmt.Errorf("Couldn't obtain list of volumes from local cache. Error: %v", err)
+		return nil, volumeConfig{}, false, fmt.Errorf("Couldn't obtain list of volumes from local cache. Error: %v", err)
 	}
 
 	_, inLocalCache := localCache[name]
@@ -373,7 +417,7 @@ func (s *volumeStore) get(name string) (*model.Volume, bool, error) {
 	moved := false
 	if !inRancher && !inLocalCache {
 		// neither Rancher nor the local cache thinks this volume is on this host. It doesn't exist
-		return nil, false, nil
+		return nil, volumeConfig{}, false, nil
 	} else if inRancher && !inLocalCache {
 		// Rancher says its on this host, but not in local cache, create entry
 		s.create(name)
@@ -384,7 +428,7 @@ func (s *volumeStore) get(name string) (*model.Volume, bool, error) {
 
 	vol := s.constructVolume(name, moved)
 
-	return vol, moved, nil
+	return vol, config, moved, nil
 }
 
 func (s *volumeStore) list() ([]*model.Volume, error) {
@@ -428,7 +472,7 @@ func (s *volumeStore) constructVolume(name string, moved bool) *model.Volume {
 	if moved {
 		vol.Mountpoint = "moved"
 	} else {
-		mp := mountPoint(name)
+		mp := mountPoint(s.rootDir, name)
 		if _, err := os.Stat(mp); err == nil {
 			vol.Mountpoint = mp
 		}
@@ -439,7 +483,7 @@ func (s *volumeStore) constructVolume(name string, moved bool) *model.Volume {
 
 func (s *volumeStore) getVolumesInLocalCache() (map[string]bool, error) {
 	volumes := map[string]bool{}
-	files, err := ioutil.ReadDir(filepath.Join(root, localCacheDir))
+	files, err := ioutil.ReadDir(filepath.Join(s.rootDir, localCacheDir))
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +498,7 @@ func (s *volumeStore) getVolumesInLocalCache() (map[string]bool, error) {
 	return volumes, nil
 }
 
-func (s *volumeStore) getVolumesFromRancher() (map[string]bool, error) {
+func (s *volumeStore) getVolumesFromRancher() (map[string]volumeConfig, error) {
 	// TODO We could cache the result for 5 or 10 seconds to reduce calls to metadata
 	stacks, err := s.metadata.GetStacks()
 	if err != nil {
@@ -468,16 +512,40 @@ func (s *volumeStore) getVolumesFromRancher() (map[string]bool, error) {
 		}
 		s.hostUUID = con.HostUUID
 	}
-	volumes := map[string]bool{}
+	volumes := map[string]volumeConfig{}
 	for _, stack := range stacks {
 		if strings.HasPrefix(stack.Name, volumeStackPrefix) {
 			for _, service := range stack.Services {
 				if service.Name == "controller" {
 					for _, container := range service.Containers {
-						if lhmd := service.Metadata["longhorn"]; lhmd != nil && container.HostUUID == s.hostUUID {
+						if lhmd := service.Metadata["volume"]; lhmd != nil && container.HostUUID == s.hostUUID {
 							if m, ok := lhmd.(map[string]interface{}); ok {
 								if name, ok := m["volume_name"].(string); ok && name != "" {
-									volumes[name] = true
+									config, ok := m["volume_config"]
+									if !ok {
+										logrus.Warnf("Volume %v doesn't have config. Won't list as a volume.", name)
+										continue
+									}
+									m, ok := config.(map[string]interface{})
+
+									if !ok {
+										logrus.Warnf("Volume %v's config isn't a map. Won't list as a volume.", name)
+										continue
+									}
+
+									if len(m) == 0 {
+										logrus.Warnf("Volume %v's config is empty. Won't list as a volume.", name)
+										continue
+
+									}
+
+									var volumeConfig = volumeConfig{}
+									if err := mapstructure.Decode(m, &volumeConfig); err != nil {
+										logrus.Errorf("Error unmarshalling volume config for %v: %v. Won't list as a volume", name, err)
+										continue
+									}
+
+									volumes[name] = volumeConfig
 								}
 							}
 						}
@@ -487,4 +555,22 @@ func (s *volumeStore) getVolumesFromRancher() (map[string]bool, error) {
 		}
 	}
 	return volumes, nil
+}
+
+type volumeConfig struct {
+	Name             string `json:"name,omitempty" mapstructure:"name"`
+	Size             string `json:"size,omitempty" mapstructure:"size"`
+	SizeGB           string `json:"sizeGB,omitempty" mapstructure:"sizeGB"`
+	ReplicaBaseImage string `json:"replicaBaseImage,omitempty" mapstructure:"replicaBaseImage"`
+	DontFormat       bool   `json:"dontFormat,omitempty" mapstructure:"dontFormat"`
+}
+
+func (v volumeConfig) Json() string {
+	j, err := json.Marshal(v)
+	if err != nil {
+		logrus.Errorf("Error marshalling volume config %v: %v")
+		return ""
+	}
+
+	return string(j)
 }

@@ -1,11 +1,14 @@
 package driver
 
 import (
+	"crypto/md5"
 	"errors"
 	"fmt"
 	"strings"
+	"text/template"
 	"time"
 
+	"bytes"
 	"github.com/Sirupsen/logrus"
 	rancherClient "github.com/rancher/go-rancher/client"
 )
@@ -16,34 +19,55 @@ const (
 	composeAffinityLabel   = "io.rancher.scheduler.affinity:container"
 	composeVolumeName      = "VOLUME_NAME"
 	composeVolumeSize      = "VOLUME_SIZE"
-	composeDriverContainer = "LONGHORN_DRIVER_CONTAINER"
-	composeLonghornImage   = "LONGHORN_IMAGE"
+	composeDriverContainer = "DRIVER_CONTAINER"
+	composeImage           = "IMAGE"
 )
+
+var composeTemplate *template.Template
+
+func init() {
+	tmplt, err := template.New("compose").Parse(DockerComposeTemplate)
+	if err != nil {
+		logrus.Panicf("Error parsing compose tempalte: %v", err)
+	}
+
+	composeTemplate = tmplt
+}
 
 type stack struct {
 	rancherClient       *rancherClient.RancherClient
 	externalId          string
 	name                string
 	environment         map[string]interface{}
-	template            string
 	driverContainerName string
+	driver              string
+	volumeConfig        volumeConfig
 }
 
-func newStack(volumeName, driverName, driverContainerName, image string, size string, rancherClient *rancherClient.RancherClient) *stack {
+func newStack(volumeName, driverContainerName, driver, image string, volConfig volumeConfig, rancherClient *rancherClient.RancherClient) *stack {
 	env := map[string]interface{}{
-		composeLonghornImage:   image,
+		composeImage:           image,
 		composeVolumeName:      volumeName,
-		composeVolumeSize:      size,
+		composeVolumeSize:      volConfig.Size,
 		composeDriverContainer: driverContainerName,
+	}
+
+	nameNoUnderscores := strings.Replace(volumeName, "_", "-", -1)
+	stackName := volumeStackPrefix + nameNoUnderscores
+	if len(stackName) > 63 {
+		hash := fmt.Sprintf("%x", md5.Sum([]byte(nameNoUnderscores)))
+		leftover := 63 - (len(volumeStackPrefix) + len(hash) + 1)
+		partialName := nameNoUnderscores[0:leftover]
+		stackName = volumeStackPrefix + partialName + "-" + hash
 	}
 
 	return &stack{
 		rancherClient:       rancherClient,
-		name:                volumeStackPrefix + strings.Replace(volumeName, "_", "-", -1),
-		externalId:          "system://longhorn?name=" + volumeName,
-		template:            DockerComposeTemplate,
+		name:                stackName,
+		externalId:          fmt.Sprintf("system://%s?name=%s", driver, volumeName),
 		environment:         env,
 		driverContainerName: driverContainerName,
+		volumeConfig:        volConfig,
 	}
 }
 
@@ -53,11 +77,16 @@ func (s *stack) create() (*rancherClient.Environment, error) {
 		return nil, err
 	}
 
+	dockerCompose := new(bytes.Buffer)
+	if err := composeTemplate.Execute(dockerCompose, s.volumeConfig); err != nil {
+		return nil, fmt.Errorf("Error generating docker compose: %v", err)
+	}
+
 	config := &rancherClient.Environment{
 		Name:          s.name,
 		ExternalId:    s.externalId,
 		Environment:   s.environment,
-		DockerCompose: s.template,
+		DockerCompose: dockerCompose.String(),
 		StartOnCreate: true,
 	}
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/rancher/docker-longhorn-driver/util"
 	"github.com/rancher/go-rancher/client"
 )
 
@@ -42,6 +43,7 @@ func (c *CattleClient) SyncStoragePool(driver string, hostUuids []string) error 
 		ExternalId:       driver,
 		DriverName:       driver,
 		VolumeAccessMode: "singleHostRW",
+		BlockDevicePath:  util.DevDir,
 	}
 	espe := &client.ExternalStoragePoolEvent{
 		EventType:   "storagepool.create",

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	deleteUrl = "http://longhorn-driver/v1/volumes/%s"
+	deleteUrl = "http://driver/v1/volumes/%s"
 )
 
 func ConnectToEventStream(conf Config) error {
@@ -125,5 +125,4 @@ type Config struct {
 	CattleAccessKey string
 	CattleSecretKey string
 	WorkerCount     int
-	Socket          string
 }

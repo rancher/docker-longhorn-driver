@@ -11,6 +11,8 @@ import (
 	"github.com/rancher/go-rancher-metadata/metadata"
 )
 
+const DevDir = "/dev/longhorn"
+
 var (
 	cmdTimeout time.Duration = time.Minute // one minute by default
 )
@@ -38,7 +40,7 @@ func GetMetadataConfig(metadataUrl string) (MetadataConfig, error) {
 	if err != nil {
 		return config, err
 	}
-	if image, ok := svc.Metadata["LONGHORN_IMAGE"]; ok {
+	if image, ok := svc.Metadata["VOLUME_STACK_IMAGE"]; ok {
 		config.Image = fmt.Sprintf("%v", image)
 	}
 
@@ -85,27 +87,30 @@ func Execute(binary string, args []string) (string, error) {
 	return string(output), nil
 }
 
-func ParseSize(size string) (string, error) {
+var (
+	kb = int64(1024)
+	mb = 1024 * kb
+	gb = 1024 * mb
+	tb = 1024 * gb
+)
+
+func ParseSize(size string) (string, string, error) {
 	if size == "" {
-		return "", nil
+		return "", "", nil
 	}
 	size = strings.ToLower(size)
 	readableSize := regexp.MustCompile(`^[0-9.]+[kmgt]$`)
 	if !readableSize.MatchString(size) {
-		return size, nil
+		return "", "", fmt.Errorf("Can't parse size %v", readableSize)
 	}
 
 	last := len(size) - 1
 	unit := string(size[last])
 	value, err := strconv.ParseInt(size[:last], 10, 64)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	kb := int64(1024)
-	mb := 1024 * kb
-	gb := 1024 * mb
-	tb := 1024 * gb
 	switch unit {
 	case "k":
 		value *= kb
@@ -116,7 +121,12 @@ func ParseSize(size string) (string, error) {
 	case "t":
 		value *= tb
 	default:
-		return "", fmt.Errorf("Unrecongized size value %v", size)
+		return "", "", fmt.Errorf("Unrecongized size value %v", size)
 	}
-	return strconv.FormatInt(value, 10), err
+
+	gbSize := value / gb
+	if gbSize < 1 {
+		gbSize = 1
+	}
+	return strconv.FormatInt(value, 10), strconv.FormatInt(gbSize, 10), nil
 }
