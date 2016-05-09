@@ -42,14 +42,12 @@ func start(c *cli.Context) {
 		rc <- err
 	}(resultChan)
 
-	socket := util.ConstructSocketNameInContainer(md.DriverName)
 	go func(rc chan error) {
 		conf := cattleevents.Config{
 			CattleURL:       cattleUrl,
 			CattleAccessKey: cattleAccessKey,
 			CattleSecretKey: cattleSecretKey,
 			WorkerCount:     10,
-			Socket:          socket,
 		}
 		err := cattleevents.ConnectToEventStream(conf)
 		logrus.Errorf("Cattle event listener exited with error: %s", err)
