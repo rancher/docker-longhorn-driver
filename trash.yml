@@ -41,10 +41,9 @@ import:
 - package: github.com/fsouza/go-dockerclient
   version: 98829062f36e94bc8c31a1c9a8b087b90f9d2d9c
 
-# TODO Update to upstream repo once PRs are merged
 - package: github.com/rancher/go-rancher
-  repo:    https://github.com/cjellick/go-rancher.git
-  version: volAccMode
+  repo:    https://github.com/rancher/go-rancher.git
+  version: 1ab9644741d825dc03a2c638dfae52882b1c7b5d
 
 - package: github.com/gorilla/websocket
   version: e2e3d8414d0fbae04004f151979f4e27c6747fe7
