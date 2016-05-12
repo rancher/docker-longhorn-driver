@@ -37,7 +37,9 @@ type StoragePool struct {
 
 	Uuid string `json:"uuid,omitempty" yaml:"uuid,omitempty"`
 
-	VolumeAccessMode string `json:"volumeAccessMode,omitempty" yaml:"uuid,omitempty"`
+	VolumeAccessMode string `json:"volumeAccessMode,omitempty" yaml:"volumeAccessMode,omitempty"`
+
+	BlockDevicePath string `json:"blockDevicePath,omitempty" yaml:"blockDevicePath,omitempty"`
 }
 
 type StoragePoolCollection struct {

@@ -4,23 +4,37 @@ const (
 	DockerComposeTemplate = `
 replica:
     scale: 2
-    image: $LONGHORN_IMAGE
+    image: {{if .ReplicaBaseImage}}{{.ReplicaBaseImage}}{{else}}$IMAGE{{end}}
+    entrypoint:
+    {{if .ReplicaBaseImage -}}
+    - /cmd/longhorn
+    {{else -}}
+    - longhorn
+    {{end -}}
     command:
-    - launch
     - replica
     - --listen
     - 0.0.0.0:9502
     - --sync-agent=false
-    - /var/lib/rancher/longhorn/$VOLUME_NAME
+    {{if .ReplicaBaseImage -}}
+    - --backing-file
+    - /base_image/ubuntu-14.04-amd64.img
+    {{end -}}
+    - /volume/$VOLUME_NAME
     volumes:
-    - /var/lib/rancher/longhorn/$VOLUME_NAME
+    - /volume/$VOLUME_NAME
+    {{ if .ReplicaBaseImage -}}
+    volumes_from:
+    - replica-binary
+    {{end -}}
     labels:
-        io.rancher.sidekicks: replica-healthcheck, sync-agent
+        io.rancher.sidekicks: replica-healthcheck, sync-agent{{if .ReplicaBaseImage}}, replica-binary{{end}}
         io.rancher.container.hostname_override: container_name
         io.rancher.scheduler.affinity:container_label_ne: io.rancher.stack_service.name=$${stack_name}/$${service_name}
-        io.rancher.scheduler.affinity:container_soft: $LONGHORN_DRIVER_CONTAINER
+        io.rancher.scheduler.affinity:container_soft: $DRIVER_CONTAINER
+        io.rancher.scheduler.disksize.{{.Name}}: {{.SizeGB}}
     metadata:
-        longhorn:
+        volume:
             volume_name: $VOLUME_NAME
             volume_size: $VOLUME_SIZE
     health_check:
@@ -36,10 +50,22 @@ replica:
         recreate_on_quorum_strategy_config:
             quorum: 1
 
+{{- if .ReplicaBaseImage}}
+
+replica-binary:
+    image: $IMAGE
+    net: none
+    command: copy-binary
+    volumes:
+    - /cmd
+    labels:
+        io.rancher.container.start_once: true
+{{- end}}
+
 sync-agent:
-    image: $LONGHORN_IMAGE
+    image: $IMAGE
     net: container:replica
-    working_dir: /var/lib/rancher/longhorn/$VOLUME_NAME
+    working_dir: /volume/$VOLUME_NAME
     volumes_from:
     - replica
     command:
@@ -49,10 +75,10 @@ sync-agent:
     - 0.0.0.0:9504
 
 replica-healthcheck:
-    image: $LONGHORN_IMAGE
+    image: $IMAGE
     net: container:replica
     metadata:
-        longhorn:
+        volume:
             volume_name: $VOLUME_NAME
             volume_size: $VOLUME_SIZE
     command:
@@ -60,7 +86,7 @@ replica-healthcheck:
     - --replica
 
 controller:
-    image: $LONGHORN_IMAGE
+    image: $IMAGE
     command:
     - launch
     - controller
@@ -76,10 +102,11 @@ controller:
     labels:
         io.rancher.sidekicks: controller-agent
         io.rancher.container.hostname_override: container_name
-        io.rancher.scheduler.affinity:container: $LONGHORN_DRIVER_CONTAINER
+        io.rancher.scheduler.affinity:container: $DRIVER_CONTAINER
     metadata:
-        longhorn:
+        volume:
           volume_name: $VOLUME_NAME
+          volume_config: {{.Json}}
     health_check:
         healthy_threshold: 1
         unhealthy_threshold: 2
@@ -90,10 +117,10 @@ controller:
         strategy: none
 
 controller-agent:
-    image: $LONGHORN_IMAGE
+    image: $IMAGE
     net: container:controller
     metadata:
-        longhorn:
+        volume:
           volume_name: $VOLUME_NAME
     command:
     - longhorn-agent

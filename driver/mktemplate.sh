@@ -7,7 +7,7 @@ package driver
 
 const (
 	DockerComposeTemplate = \`
-$(<docker-compose.yml)
+$(<docker-compose.yml.tmpl)
 \`
 )
 EOF
