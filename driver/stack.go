@@ -1,57 +1,109 @@
 package driver
 
 import (
+	"crypto/md5"
 	"errors"
 	"fmt"
+	"strings"
+	"text/template"
 	"time"
 
+	"bytes"
 	"github.com/Sirupsen/logrus"
 	rancherClient "github.com/rancher/go-rancher/client"
 )
 
 const (
-	RETRY_INTERVAL = 2 * time.Second
-	RETRY_MAX      = 200
-	AFFINITY_LABEL = "io.rancher.scheduler.affinity:container"
+	retryInterval          = 2 * time.Second
+	retryMax               = 200
+	composeAffinityLabel   = "io.rancher.scheduler.affinity:container"
+	composeVolumeName      = "VOLUME_NAME"
+	composeVolumeSize      = "VOLUME_SIZE"
+	composeDriverContainer = "DRIVER_CONTAINER"
+	composeImage           = "IMAGE"
 )
 
-type Stack struct {
-	Client        *rancherClient.RancherClient
-	ExternalId    string
-	Name          string
-	Environment   map[string]interface{}
-	Template      string
-	ContainerName string
+var composeTemplate *template.Template
+
+func init() {
+	tmplt, err := template.New("compose").Parse(DockerComposeTemplate)
+	if err != nil {
+		logrus.Panicf("Error parsing compose tempalte: %v", err)
+	}
+
+	composeTemplate = tmplt
 }
 
-func (s *Stack) Create() (*rancherClient.Environment, error) {
-	env, err := s.Find()
+type stack struct {
+	rancherClient       *rancherClient.RancherClient
+	externalId          string
+	name                string
+	environment         map[string]interface{}
+	driverContainerName string
+	driver              string
+	volumeConfig        volumeConfig
+}
+
+func newStack(volumeName, driverContainerName, driver, image string, volConfig volumeConfig, rancherClient *rancherClient.RancherClient) *stack {
+	env := map[string]interface{}{
+		composeImage:           image,
+		composeVolumeName:      volumeName,
+		composeVolumeSize:      volConfig.Size,
+		composeDriverContainer: driverContainerName,
+	}
+
+	nameNoUnderscores := strings.Replace(volumeName, "_", "-", -1)
+	stackName := volumeStackPrefix + nameNoUnderscores
+	if len(stackName) > 63 {
+		hash := fmt.Sprintf("%x", md5.Sum([]byte(nameNoUnderscores)))
+		leftover := 63 - (len(volumeStackPrefix) + len(hash) + 1)
+		partialName := nameNoUnderscores[0:leftover]
+		stackName = volumeStackPrefix + partialName + "-" + hash
+	}
+
+	return &stack{
+		rancherClient:       rancherClient,
+		name:                stackName,
+		externalId:          fmt.Sprintf("system://%s?name=%s", driver, volumeName),
+		environment:         env,
+		driverContainerName: driverContainerName,
+		volumeConfig:        volConfig,
+	}
+}
+
+func (s *stack) create() (*rancherClient.Environment, error) {
+	env, err := s.find()
 	if err != nil {
 		return nil, err
 	}
 
+	dockerCompose := new(bytes.Buffer)
+	if err := composeTemplate.Execute(dockerCompose, s.volumeConfig); err != nil {
+		return nil, fmt.Errorf("Error generating docker compose: %v", err)
+	}
+
 	config := &rancherClient.Environment{
-		Name:          s.Name,
-		ExternalId:    s.ExternalId,
-		Environment:   s.Environment,
-		DockerCompose: s.Template,
+		Name:          s.name,
+		ExternalId:    s.externalId,
+		Environment:   s.environment,
+		DockerCompose: dockerCompose.String(),
 		StartOnCreate: true,
 	}
 
 	if env == nil {
-		env, err = s.Client.Environment.Create(config)
+		env, err = s.rancherClient.Environment.Create(config)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if err := WaitEnvironment(s.Client, env); err != nil {
+	if err := WaitEnvironment(s.rancherClient, env); err != nil {
 		return nil, err
 	}
 
 	if err := s.waitForServices(env, "active"); err != nil {
 		logrus.Debugf("Failed waiting services to be ready to launch. Cleaning up %v", env.Name)
-		if err := s.Client.Environment.Delete(env); err != nil {
+		if err := s.rancherClient.Environment.Delete(env); err != nil {
 			return nil, err
 		}
 	}
@@ -59,24 +111,24 @@ func (s *Stack) Create() (*rancherClient.Environment, error) {
 	return env, nil
 }
 
-func (s *Stack) Delete() error {
-	env, err := s.Find()
+func (s *stack) delete() error {
+	env, err := s.find()
 	if err != nil || env == nil {
 		return err
 	}
 
-	if err := s.Client.Environment.Delete(env); err != nil {
+	if err := s.rancherClient.Environment.Delete(env); err != nil {
 		return err
 	}
 
-	return WaitEnvironment(s.Client, env)
+	return WaitEnvironment(s.rancherClient, env)
 }
 
-func (s *Stack) Find() (*rancherClient.Environment, error) {
-	envs, err := s.Client.Environment.List(&rancherClient.ListOpts{
+func (s *stack) find() (*rancherClient.Environment, error) {
+	envs, err := s.rancherClient.Environment.List(&rancherClient.ListOpts{
 		Filters: map[string]interface{}{
-			"name":         s.Name,
-			"externalId":   s.ExternalId,
+			"name":         s.name,
+			"externalId":   s.externalId,
 			"removed_null": nil,
 		},
 	})
@@ -88,14 +140,14 @@ func (s *Stack) Find() (*rancherClient.Environment, error) {
 	}
 	if len(envs.Data) > 1 {
 		// This really shouldn't ever happen
-		return nil, fmt.Errorf("More than one stack found for %s", s.Name)
+		return nil, fmt.Errorf("More than one stack found for %s", s.name)
 	}
 
 	return &envs.Data[0], nil
 }
 
-func (s *Stack) confirmControllerUpgrade(env *rancherClient.Environment) (*rancherClient.Service, error) {
-	services, err := s.Client.Service.List(&rancherClient.ListOpts{
+func (s *stack) confirmControllerUpgrade(env *rancherClient.Environment) (*rancherClient.Service, error) {
+	services, err := s.rancherClient.Service.List(&rancherClient.ListOpts{
 		Filters: map[string]interface{}{
 			"environmentId": env.Id,
 			"name":          "controller",
@@ -110,16 +162,16 @@ func (s *Stack) confirmControllerUpgrade(env *rancherClient.Environment) (*ranch
 	}
 
 	controller := &services.Data[0]
-	if err := WaitService(s.Client, controller); err != nil {
+	if err := WaitService(s.rancherClient, controller); err != nil {
 		return nil, err
 	}
 
 	if controller.State == "upgraded" {
-		controller, err := s.Client.Service.ActionFinishupgrade(controller)
+		controller, err := s.rancherClient.Service.ActionFinishupgrade(controller)
 		if err != nil {
 			return nil, err
 		}
-		err = WaitService(s.Client, controller)
+		err = WaitService(s.rancherClient, controller)
 		if err != nil {
 			return nil, err
 		}
@@ -128,8 +180,8 @@ func (s *Stack) confirmControllerUpgrade(env *rancherClient.Environment) (*ranch
 	return controller, nil
 }
 
-func (s *Stack) MoveController() error {
-	env, err := s.Find()
+func (s *stack) moveController() error {
+	env, err := s.find()
 	if err != nil {
 		return err
 	}
@@ -139,12 +191,12 @@ func (s *Stack) MoveController() error {
 		return err
 	}
 
-	if controller.LaunchConfig.Labels[AFFINITY_LABEL] != s.ContainerName {
+	if controller.LaunchConfig.Labels[composeAffinityLabel] != s.driverContainerName {
 		newLaunchConfig := controller.LaunchConfig
-		newLaunchConfig.Labels[AFFINITY_LABEL] = s.ContainerName
+		newLaunchConfig.Labels[composeAffinityLabel] = s.driverContainerName
 
-		logrus.Infof("Moving controller to next to container %s", s.ContainerName)
-		controller, err = s.Client.Service.ActionUpgrade(controller, &rancherClient.ServiceUpgrade{
+		logrus.Infof("Moving controller to next to container %s", s.driverContainerName)
+		controller, err = s.rancherClient.Service.ActionUpgrade(controller, &rancherClient.ServiceUpgrade{
 			InServiceStrategy: &rancherClient.InServiceUpgradeStrategy{
 				LaunchConfig: newLaunchConfig,
 			},
@@ -160,19 +212,19 @@ func (s *Stack) MoveController() error {
 	return nil
 }
 
-func (s *Stack) waitForServices(env *rancherClient.Environment, targetState string) error {
+func (s *stack) waitForServices(env *rancherClient.Environment, targetState string) error {
 	var serviceCollection rancherClient.ServiceCollection
 	ready := false
 
-	if err := s.Client.GetLink(env.Resource, "services", &serviceCollection); err != nil {
+	if err := s.rancherClient.GetLink(env.Resource, "services", &serviceCollection); err != nil {
 		return err
 	}
 	targetServiceCount := len(serviceCollection.Data)
 
-	for i := 0; !ready && i < RETRY_MAX; i++ {
+	for i := 0; !ready && i < retryMax; i++ {
 		logrus.Debugf("Waiting for %v services in %v turn to %v state", targetServiceCount, env.Name, targetState)
-		time.Sleep(RETRY_INTERVAL)
-		if err := s.Client.GetLink(env.Resource, "services", &serviceCollection); err != nil {
+		time.Sleep(retryInterval)
+		if err := s.rancherClient.GetLink(env.Resource, "services", &serviceCollection); err != nil {
 			return err
 		}
 		services := serviceCollection.Data
@@ -198,17 +250,17 @@ func (s *Stack) waitForServices(env *rancherClient.Environment, targetState stri
 	return nil
 }
 
-func (s *Stack) waitActive(service *rancherClient.Service) (*rancherClient.Service, error) {
-	err := WaitService(s.Client, service)
+func (s *stack) waitActive(service *rancherClient.Service) (*rancherClient.Service, error) {
+	err := WaitService(s.rancherClient, service)
 	if err != nil || service.State != "upgraded" {
 		return service, err
 	}
 
-	if _, err := s.Client.Service.ActionFinishupgrade(service); err != nil {
+	if _, err := s.rancherClient.Service.ActionFinishupgrade(service); err != nil {
 		return nil, err
 	}
 
-	if err := WaitService(s.Client, service); err != nil {
+	if err := WaitService(s.rancherClient, service); err != nil {
 		return nil, err
 	}
 
