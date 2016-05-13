@@ -4,9 +4,9 @@ import (
 	"testing"
 )
 
-func TestParse(t *testing.T) {
+func TestConvertSize(t *testing.T) {
 
-	size, sizeGB, err := ParseSize("0b")
+	size, sizeGB, err := ConvertSize("0b")
 	if err != nil {
 		t.Fatalf("Couldn't parse zero. Error: %v", err)
 	}
@@ -19,7 +19,7 @@ func TestParse(t *testing.T) {
 		t.Fatalf("SizeGB is: %v. Expected 1", size)
 	}
 
-	size, sizeGB, err = ParseSize("1024b")
+	size, sizeGB, err = ConvertSize("1024b")
 	if err != nil {
 		t.Fatalf("Couldn't parse zero. Error: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestParse(t *testing.T) {
 		t.Fatalf("SizeGB is: %v. Expected 1", size)
 	}
 
-	size, sizeGB, err = ParseSize("1024")
+	size, sizeGB, err = ConvertSize("1024")
 	if err == nil {
 		t.Fatalf("Expected error parsing size because no unit was specified.")
 	}

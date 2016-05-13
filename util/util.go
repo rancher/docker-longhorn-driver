@@ -3,10 +3,10 @@ package util
 import (
 	"fmt"
 	"os/exec"
-	"regexp"
 	"strconv"
-	"strings"
 	"time"
+
+	"github.com/docker/go-units"
 
 	"github.com/rancher/go-rancher-metadata/metadata"
 )
@@ -87,47 +87,20 @@ func Execute(binary string, args []string) (string, error) {
 	return string(output), nil
 }
 
-var (
-	kb = int64(1024)
-	mb = 1024 * kb
-	gb = 1024 * mb
-	tb = 1024 * gb
-)
-
-func ParseSize(size string) (string, string, error) {
+func ConvertSize(size string) (string, string, error) {
 	if size == "" {
 		return "", "", nil
 	}
-	size = strings.ToLower(size)
-	readableSize := regexp.MustCompile(`^[0-9.]+[bkmgt]$`)
-	if !readableSize.MatchString(size) {
-		return "", "", fmt.Errorf("Can't parse size %v", readableSize)
-	}
 
-	last := len(size) - 1
-	unit := string(size[last])
-	value, err := strconv.ParseInt(size[:last], 10, 64)
+	sizeInBytes, err := units.RAMInBytes(size)
 	if err != nil {
 		return "", "", err
 	}
 
-	switch unit {
-	case "b":
-	case "k":
-		value *= kb
-	case "m":
-		value *= mb
-	case "g":
-		value *= gb
-	case "t":
-		value *= tb
-	default:
-		return "", "", fmt.Errorf("Unrecongized size value %v", size)
-	}
-
-	gbSize := value / gb
-	if gbSize < 1 {
+	gbSize := sizeInBytes / units.GiB
+	if gbSize < 1 && sizeInBytes != 0 {
 		gbSize = 1
 	}
-	return strconv.FormatInt(value, 10), strconv.FormatInt(gbSize, 10), nil
+	return strconv.FormatInt(sizeInBytes, 10), strconv.FormatInt(gbSize, 10), nil
+
 }

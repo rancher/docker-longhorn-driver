@@ -30,7 +30,9 @@ replica:
         io.rancher.container.hostname_override: container_name
         io.rancher.scheduler.affinity:container_label_ne: io.rancher.stack_service.name=$${stack_name}/$${service_name}
         io.rancher.scheduler.affinity:container_soft: $DRIVER_CONTAINER
-        io.rancher.scheduler.disksize.{{.Name}}: {{.SizeGB}}
+        {{if (and (ne .SizeGB "0") (ne .SizeGB "")) -}}
+        io.rancher.resource.disksize.{{.Name}}: {{.SizeGB}}
+        {{- end}}
     metadata:
         volume:
             volume_name: $VOLUME_NAME

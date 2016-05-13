@@ -137,7 +137,7 @@ func (d *StorageDaemon) Create(volume *model.Volume) (*model.Volume, error) {
 		sizeStr = defaultVolumeSize
 		logrus.Infof("No size option provided. Using default: %v", defaultVolumeSize)
 	}
-	size, sizeGB, err := util.ParseSize(sizeStr)
+	size, sizeGB, err := util.ConvertSize(sizeStr)
 	if err != nil {
 		return nil, fmt.Errorf("Can't parse size %v. Error: %v", sizeStr, err)
 	}
@@ -166,7 +166,6 @@ func (d *StorageDaemon) doCreateVolume(volume *model.Volume, stack *stack) error
 	if err != nil {
 		return err
 	}
-	logrus.Infof("Found %v", env)
 
 	// Always run create because it also ensures that things are active
 	if _, err := stack.create(); err != nil {
@@ -568,7 +567,7 @@ type volumeConfig struct {
 func (v volumeConfig) Json() string {
 	j, err := json.Marshal(v)
 	if err != nil {
-		logrus.Errorf("Error marshalling volume config %v: %v", err)
+		logrus.Errorf("Error marshalling volume config %v: %v", v, err)
 		return ""
 	}
 
