@@ -32,7 +32,7 @@ const (
 	umountBin           = "umount"
 	rancherMetadataURL  = "http://rancher-metadata/2015-12-19"
 	volumeStackPrefix   = "volume-"
-	defaultVolumeSize   = "0b"
+	defaultVolumeSize   = "10g"
 	optSize             = "size"
 	optReplicaBaseImage = "base-image"
 	optDontFormat       = "dont-format"
@@ -132,17 +132,21 @@ func (d *StorageDaemon) Create(volume *model.Volume) (*model.Volume, error) {
 	d.store.create(volume.Name)
 
 	sizeStr := volume.Opts[optSize]
+	dontFormat, _ := strconv.ParseBool(volume.Opts[optDontFormat])
 	var size string
 	if sizeStr == "" {
-		sizeStr = defaultVolumeSize
-		logrus.Infof("No size option provided. Using default: %v", defaultVolumeSize)
+		if dontFormat {
+			sizeStr = "0b"
+		} else {
+			sizeStr = defaultVolumeSize
+		}
+		logrus.Infof("No size option provided. Using: %v", sizeStr)
 	}
 	size, sizeGB, err := util.ConvertSize(sizeStr)
 	if err != nil {
 		return nil, fmt.Errorf("Can't parse size %v. Error: %v", sizeStr, err)
 	}
 
-	dontFormat, _ := strconv.ParseBool(volume.Opts[optDontFormat])
 	volConfig := volumeConfig{
 		Name:             volume.Name,
 		Size:             size,
