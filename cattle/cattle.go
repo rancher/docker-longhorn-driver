@@ -8,21 +8,21 @@ import (
 	"github.com/rancher/go-rancher/client"
 )
 
-type CattleInterface interface {
+type StoragePoolManager interface {
 	SyncStoragePool(string, []string) error
 }
 
-type CattleClient struct {
+type mgr struct {
 	rancherClient *client.RancherClient
 }
 
-func NewCattleClient(cattleUrl, cattleAccessKey, cattleSecretKey string) (*CattleClient, error) {
-	if cattleUrl == "" {
+func NewCattleClient(cattleURL, cattleAccessKey, cattleSecretKey string) (StoragePoolManager, error) {
+	if cattleURL == "" {
 		return nil, errors.New("cattle url is empty")
 	}
 
 	apiClient, err := client.NewRancherClient(&client.ClientOpts{
-		Url:       cattleUrl,
+		Url:       cattleURL,
 		AccessKey: cattleAccessKey,
 		SecretKey: cattleSecretKey,
 	})
@@ -31,12 +31,12 @@ func NewCattleClient(cattleUrl, cattleAccessKey, cattleSecretKey string) (*Cattl
 		return nil, err
 	}
 
-	return &CattleClient{
+	return &mgr{
 		rancherClient: apiClient,
 	}, nil
 }
 
-func (c *CattleClient) SyncStoragePool(driver string, hostUuids []string) error {
+func (c *mgr) SyncStoragePool(driver string, hostUuids []string) error {
 	log.Debugf("storagepool event %v", hostUuids)
 	sp := client.StoragePool{
 		Name:             driver,

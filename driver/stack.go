@@ -36,7 +36,7 @@ func init() {
 
 type stack struct {
 	rancherClient       *rancherClient.RancherClient
-	externalId          string
+	externalID          string
 	name                string
 	environment         map[string]interface{}
 	driverContainerName string
@@ -64,7 +64,7 @@ func newStack(volumeName, driverContainerName, driver, image string, volConfig v
 	return &stack{
 		rancherClient:       rancherClient,
 		name:                stackName,
-		externalId:          fmt.Sprintf("system://%s?name=%s", driver, volumeName),
+		externalID:          fmt.Sprintf("system://%s?name=%s", driver, volumeName),
 		environment:         env,
 		driverContainerName: driverContainerName,
 		volumeConfig:        volConfig,
@@ -84,7 +84,7 @@ func (s *stack) create() (*rancherClient.Environment, error) {
 
 	config := &rancherClient.Environment{
 		Name:          s.name,
-		ExternalId:    s.externalId,
+		ExternalId:    s.externalID,
 		Environment:   s.environment,
 		DockerCompose: dockerCompose.String(),
 		StartOnCreate: true,
@@ -128,7 +128,7 @@ func (s *stack) find() (*rancherClient.Environment, error) {
 	envs, err := s.rancherClient.Environment.List(&rancherClient.ListOpts{
 		Filters: map[string]interface{}{
 			"name":         s.name,
-			"externalId":   s.externalId,
+			"externalId":   s.externalID,
 			"removed_null": nil,
 		},
 	})

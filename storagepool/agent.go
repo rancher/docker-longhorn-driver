@@ -8,24 +8,24 @@ import (
 	"github.com/rancher/docker-longhorn-driver/cattle"
 )
 
-type StoragePoolAgent struct {
+type Agent struct {
 	healthCheckInterval int
 	driver              string
-	cattleClient        cattle.CattleInterface
+	cattleClient        cattle.StoragePoolManager
 }
 
-func NewStoragepoolAgent(healthCheckInterval int, driver string, cattleClient cattle.CattleInterface) *StoragePoolAgent {
-	return &StoragePoolAgent{
+func NewStoragepoolAgent(healthCheckInterval int, driver string, cattleClient cattle.StoragePoolManager) *Agent {
+	return &Agent{
 		healthCheckInterval: healthCheckInterval,
 		driver:              driver,
 		cattleClient:        cattleClient,
 	}
 }
 
-func (s *StoragePoolAgent) Run(metadataUrl string) error {
+func (s *Agent) Run(metadataURL string) error {
 	prevSent := map[string]bool{}
 
-	hc, err := newHealthChecker(metadataUrl)
+	hc, err := newHealthChecker(metadataURL)
 	if err != nil {
 		log.Errorf("Error initializing health checker, err = [%v]", err)
 		return err

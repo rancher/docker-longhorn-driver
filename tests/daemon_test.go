@@ -12,7 +12,7 @@ import (
 	//	"github.com/rancher/docker-longhorn-driver/driver"
 )
 
-const baseUrl = "http://localhost/v1/"
+const baseURL = "http://localhost/v1/"
 
 // Hook up gocheck into the "go test" runner.
 func Test(t *testing.T) {

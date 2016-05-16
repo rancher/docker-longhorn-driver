@@ -106,7 +106,7 @@ controller:
     metadata:
         volume:
           volume_name: $VOLUME_NAME
-          volume_config: {{.Json}}
+          volume_config: {{.JSON}}
     health_check:
         healthy_threshold: 1
         unhealthy_threshold: 2

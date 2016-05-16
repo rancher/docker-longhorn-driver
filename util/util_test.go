@@ -15,8 +15,8 @@ func TestConvertSize(t *testing.T) {
 		t.Fatalf("Size is: %v. Expected 0", size)
 	}
 
-	if sizeGB != "1" {
-		t.Fatalf("SizeGB is: %v. Expected 1", size)
+	if sizeGB != "0" {
+		t.Fatalf("SizeGB is: %v. Expected 0", sizeGB)
 	}
 
 	size, sizeGB, err = ConvertSize("1024b")
@@ -29,11 +29,15 @@ func TestConvertSize(t *testing.T) {
 	}
 
 	if sizeGB != "1" {
-		t.Fatalf("SizeGB is: %v. Expected 1", size)
+		t.Fatalf("SizeGB is: %v. Expected 1", sizeGB)
 	}
 
 	size, sizeGB, err = ConvertSize("1024")
-	if err == nil {
-		t.Fatalf("Expected error parsing size because no unit was specified.")
+	if size != "1024" {
+		t.Fatalf("Size is: %v. Expected 0", size)
+	}
+
+	if sizeGB != "1" {
+		t.Fatalf("SizeGB is: %v. Expected 1", sizeGB)
 	}
 }

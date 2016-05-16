@@ -14,7 +14,7 @@ import (
 const DevDir = "/dev/longhorn"
 
 var (
-	cmdTimeout time.Duration = time.Minute // one minute by default
+	cmdTimeout = time.Minute // one minute by default
 )
 
 type MetadataConfig struct {
@@ -23,9 +23,9 @@ type MetadataConfig struct {
 	ContainerName string
 }
 
-func GetMetadataConfig(metadataUrl string) (MetadataConfig, error) {
+func GetMetadataConfig(metadataURL string) (MetadataConfig, error) {
 	config := MetadataConfig{}
-	client, err := metadata.NewClientAndWait(metadataUrl)
+	client, err := metadata.NewClientAndWait(metadataURL)
 	if err != nil {
 		return config, err
 	}
