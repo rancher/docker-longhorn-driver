@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	deleteUrl = "http://driver/v1/volumes/%s"
+	deleteURL = "http://driver/v1/volumes/%s"
 )
 
 func ConnectToEventStream(conf Config) error {
@@ -61,7 +61,7 @@ func (h *volumeDeleteHandler) Handler(event *revents.Event, cli *client.RancherC
 
 	name := vspm.VSPM.V.Name
 	if name != "" {
-		req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf(deleteUrl, name), nil)
+		req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf(deleteURL, name), nil)
 		if err != nil {
 			return fmt.Errorf("Error building delete request for %v: %v", name, err)
 		}

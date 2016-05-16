@@ -568,7 +568,7 @@ type volumeConfig struct {
 	DontFormat       bool   `json:"dontFormat,omitempty" mapstructure:"dontFormat"`
 }
 
-func (v volumeConfig) Json() string {
+func (v volumeConfig) JSON() string {
 	j, err := json.Marshal(v)
 	if err != nil {
 		logrus.Errorf("Error marshalling volume config %v: %v", v, err)

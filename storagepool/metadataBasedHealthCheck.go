@@ -10,20 +10,20 @@ type healthChecker interface {
 	populateHostMap() (map[string]string, error)
 }
 
-func newHealthChecker(metadataUrl string) (healthChecker, error) {
+func newHealthChecker(metadataURL string) (healthChecker, error) {
 	return &metadataBasedHealthCheck{
-		metadataUrl: metadataUrl,
+		metadataURL: metadataURL,
 	}, nil
 }
 
 type metadataBasedHealthCheck struct {
 	version     string
 	prevHosts   map[string]string
-	metadataUrl string
+	metadataURL string
 }
 
 func (mt *metadataBasedHealthCheck) populateHostMap() (map[string]string, error) {
-	m := metadata.NewClient(mt.metadataUrl)
+	m := metadata.NewClient(mt.metadataURL)
 
 	version, err := m.GetVersion()
 	if err != nil {

@@ -18,17 +18,17 @@ var Command = cli.Command{
 func start(c *cli.Context) {
 	healthCheckInterval := c.GlobalInt("healthcheck-interval")
 
-	cattleUrl := c.GlobalString("cattle-url")
+	cattleURL := c.GlobalString("cattle-url")
 	cattleAccessKey := c.GlobalString("cattle-access-key")
 	cattleSecretKey := c.GlobalString("cattle-secret-key")
 
-	cattleClient, err := cattle.NewCattleClient(cattleUrl, cattleAccessKey, cattleSecretKey)
+	cattleClient, err := cattle.NewCattleClient(cattleURL, cattleAccessKey, cattleSecretKey)
 	if err != nil {
 		logrus.Fatal(err)
 	}
 
-	metadataUrl := c.GlobalString("metadata-url")
-	md, err := util.GetMetadataConfig(metadataUrl)
+	metadataURL := c.GlobalString("metadata-url")
+	md, err := util.GetMetadataConfig(metadataURL)
 	if err != nil {
 		logrus.Fatalf("Unable to get metadata: %v", err)
 	}
@@ -37,14 +37,14 @@ func start(c *cli.Context) {
 
 	go func(rc chan error) {
 		storagePoolAgent := NewStoragepoolAgent(healthCheckInterval, md.DriverName, cattleClient)
-		err := storagePoolAgent.Run(metadataUrl)
+		err := storagePoolAgent.Run(metadataURL)
 		logrus.Errorf("Error while running storage pool agent [%v]", err)
 		rc <- err
 	}(resultChan)
 
 	go func(rc chan error) {
 		conf := cattleevents.Config{
-			CattleURL:       cattleUrl,
+			CattleURL:       cattleURL,
 			CattleAccessKey: cattleAccessKey,
 			CattleSecretKey: cattleSecretKey,
 			WorkerCount:     10,
