@@ -157,6 +157,7 @@ func (d *StorageDaemon) Create(volume *model.Volume) (*model.Volume, error) {
 	stack := newStack(volume.Name, d.driverContainerName, d.driverName, d.volumeStackImage, volConfig, d.client)
 
 	if err := d.doCreateVolume(volume, stack); err != nil {
+		d.store.delete(volume.Name)
 		stack.delete()
 		return nil, fmt.Errorf("Error creating Rancher stack for volume %v: %v.", volume.Name, err)
 	}
