@@ -31,7 +31,6 @@ const (
 	mountBin            = "mount"
 	umountBin           = "umount"
 	rancherMetadataURL  = "http://rancher-metadata/2015-12-19"
-	volumeStackPrefix   = "volume-"
 	defaultVolumeSize   = "10g"
 	optSize             = "size"
 	optReplicaBaseImage = "base-image"
@@ -359,7 +358,7 @@ func getDevice(volumeName string) string {
 }
 
 func waitForDevice(dev string) error {
-	err := Backoff(5*time.Minute, fmt.Sprintf("Failed to find %s", dev), func() (bool, error) {
+	err := util.Backoff(5*time.Minute, fmt.Sprintf("Failed to find %s", dev), func() (bool, error) {
 		if _, err := os.Stat(dev); err == nil {
 			return true, nil
 		}
@@ -518,7 +517,7 @@ func (s *volumeStore) getVolumesFromRancher() (map[string]volumeConfig, error) {
 	}
 	volumes := map[string]volumeConfig{}
 	for _, stack := range stacks {
-		if strings.HasPrefix(stack.Name, volumeStackPrefix) {
+		if strings.HasPrefix(stack.Name, util.VolumeStackPrefix) {
 			for _, service := range stack.Services {
 				if service.Name == "controller" {
 					for _, container := range service.Containers {

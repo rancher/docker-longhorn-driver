@@ -1,6 +1,7 @@
 package util
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -8,10 +9,15 @@ import (
 
 	"github.com/docker/go-units"
 
+	"crypto/md5"
 	"github.com/rancher/go-rancher-metadata/metadata"
+	"strings"
 )
 
-const DevDir = "/dev/longhorn"
+const (
+	DevDir            = "/dev/longhorn"
+	VolumeStackPrefix = "volume-"
+)
 
 var (
 	cmdTimeout = time.Minute // one minute by default
@@ -103,4 +109,40 @@ func ConvertSize(size string) (string, string, error) {
 	}
 	return strconv.FormatInt(sizeInBytes, 10), strconv.FormatInt(gbSize, 10), nil
 
+}
+
+func VolumeToStackName(volumeName string) string {
+	nameNoUnderscores := strings.Replace(volumeName, "_", "-", -1)
+	stackName := VolumeStackPrefix + nameNoUnderscores
+	if len(stackName) > 63 {
+		hash := fmt.Sprintf("%x", md5.Sum([]byte(nameNoUnderscores)))
+		leftover := 63 - (len(VolumeStackPrefix) + len(hash) + 1)
+		partialName := nameNoUnderscores[0:leftover]
+		stackName = VolumeStackPrefix + partialName + "-" + hash
+	}
+	return stackName
+}
+
+func Backoff(maxDuration time.Duration, timeoutMessage string, f func() (bool, error)) error {
+	startTime := time.Now()
+	waitTime := 150 * time.Millisecond
+	maxWaitTime := 2 * time.Second
+	for {
+		if time.Now().Sub(startTime) > maxDuration {
+			return errors.New(timeoutMessage)
+		}
+
+		if done, err := f(); err != nil {
+			return err
+		} else if done {
+			return nil
+		}
+
+		time.Sleep(waitTime)
+
+		waitTime *= 2
+		if waitTime > maxWaitTime {
+			waitTime = maxWaitTime
+		}
+	}
 }

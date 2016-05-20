@@ -1,15 +1,14 @@
 package driver
 
 import (
-	"crypto/md5"
 	"errors"
 	"fmt"
-	"strings"
 	"text/template"
 	"time"
 
 	"bytes"
 	"github.com/Sirupsen/logrus"
+	"github.com/rancher/docker-longhorn-driver/util"
 	rancherClient "github.com/rancher/go-rancher/client"
 )
 
@@ -52,15 +51,7 @@ func newStack(volumeName, driverContainerName, driver, image string, volConfig v
 		composeDriverContainer: driverContainerName,
 	}
 
-	nameNoUnderscores := strings.Replace(volumeName, "_", "-", -1)
-	stackName := volumeStackPrefix + nameNoUnderscores
-	if len(stackName) > 63 {
-		hash := fmt.Sprintf("%x", md5.Sum([]byte(nameNoUnderscores)))
-		leftover := 63 - (len(volumeStackPrefix) + len(hash) + 1)
-		partialName := nameNoUnderscores[0:leftover]
-		stackName = volumeStackPrefix + partialName + "-" + hash
-	}
-
+	stackName := util.VolumeToStackName(volumeName)
 	return &stack{
 		rancherClient:       rancherClient,
 		name:                stackName,
