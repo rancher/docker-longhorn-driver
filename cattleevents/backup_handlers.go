@@ -39,7 +39,7 @@ func (h *backupHandlers) Create(event *revents.Event, cli *client.RancherClient)
 		if s.State == "done" {
 			return true, nil
 		} else if s.State == "error" {
-			return false, fmt.Errorf("Restore failed. Status: %v", s.Message)
+			return false, fmt.Errorf("Backup create failed. Status: %v", s.Message)
 		}
 		return false, nil
 	})
