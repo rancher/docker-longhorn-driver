@@ -21,12 +21,13 @@ replica:
     - /volume/$VOLUME_NAME
     volumes:
     - /volume/$VOLUME_NAME
+    - /var/lib/rancher/longhorn/backups:/var/lib/rancher/longhorn/backups:shared
     {{ if .ReplicaBaseImage -}}
     volumes_from:
     - replica-binary
     {{end -}}
     labels:
-        io.rancher.sidekicks: replica-healthcheck, sync-agent{{if .ReplicaBaseImage}}, replica-binary{{end}}
+        io.rancher.sidekicks: replica-api, sync-agent{{if .ReplicaBaseImage}}, replica-binary{{end}}
         io.rancher.container.hostname_override: container_name
         io.rancher.scheduler.affinity:container_label_ne: io.rancher.stack_service.name=$${stack_name}/$${service_name}
         io.rancher.scheduler.affinity:container_soft: $DRIVER_CONTAINER
@@ -74,8 +75,10 @@ sync-agent:
     - --listen
     - 0.0.0.0:9504
 
-replica-healthcheck:
+replica-api:
     image: $IMAGE
+    privileged: true
+    pid: host
     net: container:replica
     metadata:
         volume:

@@ -43,7 +43,7 @@ import:
 
 - package: github.com/rancher/go-rancher
   repo:    https://github.com/rancher/go-rancher.git
-  version: 1ab9644741d825dc03a2c638dfae52882b1c7b5d
+  version: f31b884e214222b352ccb9f6d4540ea7f3c6bc0e
 
 - package: github.com/gorilla/websocket
   version: e2e3d8414d0fbae04004f151979f4e27c6747fe7

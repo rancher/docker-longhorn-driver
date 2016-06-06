@@ -39,11 +39,12 @@ func NewCattleClient(cattleURL, cattleAccessKey, cattleSecretKey string) (Storag
 func (c *mgr) SyncStoragePool(driver string, hostUuids []string) error {
 	log.Debugf("storagepool event %v", hostUuids)
 	sp := client.StoragePool{
-		Name:             driver,
-		ExternalId:       driver,
-		DriverName:       driver,
-		VolumeAccessMode: "singleHostRW",
-		BlockDevicePath:  util.DevDir,
+		Name:               driver,
+		ExternalId:         driver,
+		DriverName:         driver,
+		VolumeAccessMode:   "singleHostRW",
+		BlockDevicePath:    util.DevDir,
+		VolumeCapabilities: []string{"snapshot"},
 	}
 	espe := &client.ExternalStoragePoolEvent{
 		EventType:   "storagepool.create",

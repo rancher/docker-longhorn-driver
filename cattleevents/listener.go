@@ -1,16 +1,13 @@
 package cattleevents
 
 import (
+	"fmt"
+
 	"github.com/Sirupsen/logrus"
 	"github.com/mitchellh/mapstructure"
 
 	revents "github.com/rancher/go-machine-service/events"
 	"github.com/rancher/go-rancher/client"
-
-	"fmt"
-	"github.com/rancher/docker-longhorn-driver/driver"
-	"io/ioutil"
-	"net/http"
 )
 
 const (
@@ -22,13 +19,21 @@ func ConnectToEventStream(conf Config) error {
 
 	nh := noopHandler{}
 	ph := PingHandler{}
-	vh := &volumeDeleteHandler{}
+	volume := &volumeHandlers{}
+	snapshot := &snapshotHandlers{}
+	backup := &backupHandlers{}
 
 	eventHandlers := map[string]revents.EventHandler{
-		"storage.volume.activate":   nh.Handler,
-		"storage.volume.deactivate": nh.Handler,
-		"storage.volume.remove":     vh.Handler,
-		"ping":                      ph.Handler,
+		"storage.snapshot.create":          snapshot.Create,
+		"storage.snapshot.remove":          snapshot.Delete,
+		"storage.backup.create":            backup.Create,
+		"storage.backup.remove":            backup.Delete,
+		"storage.volume.remove":            volume.VolumeRemove,
+		"storage.volume.reverttosnapshot":  volume.RevertToSnapshot,
+		"storage.volume.restorefrombackup": volume.RestoreFromBackup,
+		"storage.volume.activate":          nh.Handler,
+		"storage.volume.deactivate":        nh.Handler,
+		"ping": ph.Handler,
 	}
 
 	router, err := revents.NewEventRouter("", 0, conf.CattleURL, conf.CattleAccessKey, conf.CattleSecretKey, nil, eventHandlers, "", conf.WorkerCount)
@@ -39,52 +44,11 @@ func ConnectToEventStream(conf Config) error {
 	return err
 }
 
-type volumeDeleteHandler struct {
-	daemon *driver.StorageDaemon
-}
-
-func (h *volumeDeleteHandler) Handler(event *revents.Event, cli *client.RancherClient) error {
-	logrus.Infof("Received event: Name: %s, Event Id: %s, Resource Id: %s", event.Name, event.ID, event.ResourceID)
-
-	vspm := &struct {
-		VSPM struct {
-			V struct {
-				Name string `mapstructure:"name"`
-			} `mapstructure:"volume"`
-		} `mapstructure:"volumeStoragePoolMap"`
-	}{}
-
-	err := mapstructure.Decode(event.Data, &vspm)
-	if err != nil {
-		return fmt.Errorf("Cannot parse event %v. Error: %v", event, err)
-	}
-
-	name := vspm.VSPM.V.Name
-	if name != "" {
-		req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf(deleteURL, name), nil)
-		if err != nil {
-			return fmt.Errorf("Error building delete request for %v: %v", name, err)
-		}
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return fmt.Errorf("Error calling volume delete API for %v: %v", name, err)
-		}
-
-		if resp.StatusCode >= 300 {
-			body, _ := ioutil.ReadAll(resp.Body)
-			return fmt.Errorf("Unexpected repsonse code %v deleting %v. Body: %s", resp.StatusCode, name, body)
-		}
-	}
-
-	return volumeReply(event, cli)
-}
-
 type noopHandler struct{}
 
 func (h *noopHandler) Handler(event *revents.Event, cli *client.RancherClient) error {
 	logrus.Infof("Received and ignoring event: Name: %s, Event Id: %s, Resource Id: %s", event.Name, event.ID, event.ResourceID)
-	return volumeReply(event, cli)
+	return reply("volume", event, cli)
 }
 
 type PingHandler struct {
@@ -94,10 +58,10 @@ func (h *PingHandler) Handler(event *revents.Event, cli *client.RancherClient) e
 	return nil
 }
 
-func volumeReply(event *revents.Event, cli *client.RancherClient) error {
+func reply(resourceType string, event *revents.Event, cli *client.RancherClient) error {
 	replyData := make(map[string]interface{})
 	reply := newReply(event)
-	reply.ResourceType = "volume"
+	reply.ResourceType = resourceType
 	reply.ResourceId = event.ResourceID
 	reply.Data = replyData
 	logrus.Infof("Reply: %+v", reply)
@@ -118,6 +82,31 @@ func newReply(event *revents.Event) *client.Publish {
 func publishReply(reply *client.Publish, apiClient *client.RancherClient) error {
 	_, err := apiClient.Publish.Create(reply)
 	return err
+}
+
+func decodeEvent(event *revents.Event, key string, target interface{}) error {
+	if s, ok := event.Data[key]; ok {
+		err := mapstructure.Decode(s, target)
+		return err
+	}
+	return fmt.Errorf("Event doesn't contain snapshot data. Event: %#v.", event)
+}
+
+type eventBackup struct {
+	UUID         string
+	URI          string
+	Snapshot     eventSnapshot
+	BackupTarget struct {
+		Destination string
+	}
+}
+
+type eventSnapshot struct {
+	UUID   string
+	Volume struct {
+		Name string
+		UUID string
+	}
 }
 
 type Config struct {
