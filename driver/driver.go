@@ -33,6 +33,8 @@ const (
 	rancherMetadataURL  = "http://rancher-metadata/2015-12-19"
 	defaultVolumeSize   = "10g"
 	optSize             = "size"
+	optReadIOPS         = "read-iops"
+	optWriteIOPS        = "write-iops"
 	optReplicaBaseImage = "base-image"
 	optDontFormat       = "dont-format"
 )
@@ -150,6 +152,8 @@ func (d *StorageDaemon) Create(volume *model.Volume) (*model.Volume, error) {
 		Name:             volume.Name,
 		Size:             size,
 		SizeGB:           sizeGB,
+		ReadIOPS:         volume.Opts[optReadIOPS],
+		WriteIOPS:        volume.Opts[optWriteIOPS],
 		ReplicaBaseImage: volume.Opts[optReplicaBaseImage],
 		DontFormat:       dontFormat,
 	}
@@ -564,6 +568,8 @@ type volumeConfig struct {
 	Name             string `json:"name,omitempty" mapstructure:"name"`
 	Size             string `json:"size,omitempty" mapstructure:"size"`
 	SizeGB           string `json:"sizeGB,omitempty" mapstructure:"sizeGB"`
+	ReadIOPS         string `json:"readIops,omitempty" mapstructure:"readIops"`
+	WriteIOPS        string `json:"writeIops,omitempty" mapstructure:"writeIops"`
 	ReplicaBaseImage string `json:"replicaBaseImage,omitempty" mapstructure:"replicaBaseImage"`
 	DontFormat       bool   `json:"dontFormat,omitempty" mapstructure:"dontFormat"`
 }
