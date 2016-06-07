@@ -76,6 +76,8 @@ replica-api:
     privileged: true
     pid: host
     net: container:replica
+    volumes_from:
+    - replica
     metadata:
         volume:
             volume_name: $VOLUME_NAME

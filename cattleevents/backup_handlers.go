@@ -26,7 +26,8 @@ func (h *backupHandlers) Create(event *revents.Event, cli *client.RancherClient)
 
 	logrus.Infof("Creating backup %v", backup.UUID)
 
-	status, err := volClient.createBackup(backup.Snapshot.UUID, backup.UUID, backup.BackupTarget.Destination)
+	target := newBackupTarget(backup)
+	status, err := volClient.createBackup(backup.Snapshot.UUID, backup.UUID, target)
 	if err != nil {
 		return err
 	}
@@ -78,7 +79,8 @@ func (h *backupHandlers) Delete(event *revents.Event, cli *client.RancherClient)
 	volClient := newVolumeClient(&backup.Snapshot)
 
 	logrus.Infof("Removing backup %v", backup.UUID)
-	if _, err := volClient.removeBackup(backup.Snapshot.UUID, backup.UUID, backup.BackupTarget.Destination); err != nil {
+	target := newBackupTarget(backup)
+	if _, err := volClient.removeBackup(backup.Snapshot.UUID, backup.UUID, backup.URI, target); err != nil {
 		return err
 	}
 
@@ -92,4 +94,12 @@ func (h *backupHandlers) decodeEventBackup(event *revents.Event) (*eventBackup, 
 		return backup, err
 	}
 	return nil, fmt.Errorf("Event doesn't contain backup data. Event: %#v.", event)
+}
+
+func newBackupTarget(backup *eventBackup) backupTarget {
+	return backupTarget{
+		Name:      backup.BackupTarget.Name,
+		UUID:      backup.BackupTarget.UUID,
+		NFSConfig: backup.BackupTarget.Data.Fields.NFSConfig,
+	}
 }
