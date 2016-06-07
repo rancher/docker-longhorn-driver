@@ -53,7 +53,8 @@ func (h *volumeHandlers) RestoreFromBackup(event *revents.Event, cli *client.Ran
 
 	logrus.Infof("Restoring from backup %v", backup.UUID)
 
-	status, err := volClient.restoreFromBackup(backup.UUID, backup.URI)
+	target := newBackupTarget(backup)
+	status, err := volClient.restoreFromBackup(backup.UUID, backup.URI, target)
 	if err != nil {
 		return err
 	}

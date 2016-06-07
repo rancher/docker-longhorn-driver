@@ -53,10 +53,11 @@ func (c *volumeClient) revertToSnapshot(name string) (*volume, error) {
 	return &resp, err
 }
 
-func (c *volumeClient) removeBackup(snapshotUUID, uuid, target string) (*status, error) {
+func (c *volumeClient) removeBackup(snapshotUUID, uuid, location string, target backupTarget) (*status, error) {
 	request := &locationInput{
-		UUID:     uuid,
-		Location: target,
+		UUID:         uuid,
+		Location:     location,
+		BackupTarget: target,
 	}
 	if err := c.post(fmt.Sprintf("/snapshots/%v?action=removebackup", snapshotUUID), request, nil); err != nil {
 		if apiErr, ok := err.(apiError); ok && apiErr.statusCode == http.StatusNotFound {
@@ -68,21 +69,22 @@ func (c *volumeClient) removeBackup(snapshotUUID, uuid, target string) (*status,
 	return nil, nil
 }
 
-func (c *volumeClient) createBackup(snapshotUUID, uuid, target string) (*status, error) {
+func (c *volumeClient) createBackup(snapshotUUID, uuid string, target backupTarget) (*status, error) {
 	var resp status
 	request := &backupInput{
-		UUID:   uuid,
-		Target: target,
+		UUID:         uuid,
+		BackupTarget: target,
 	}
 	err := c.post(fmt.Sprintf("/snapshots/%v?action=backup", snapshotUUID), request, &resp)
 	return &resp, err
 }
 
-func (c *volumeClient) restoreFromBackup(uuid, target string) (*status, error) {
+func (c *volumeClient) restoreFromBackup(uuid, location string, target backupTarget) (*status, error) {
 	var resp status
 	request := &locationInput{
-		UUID:     uuid,
-		Location: target,
+		UUID:         uuid,
+		Location:     location,
+		BackupTarget: target,
 	}
 
 	err := c.post("/volumes/1?action=restorefrombackup", request, &resp)
@@ -201,13 +203,14 @@ type volume struct {
 }
 
 type backupInput struct {
-	UUID   string `json:"uuid,omitempty"`
-	Target string `json:"target,omitempty"`
+	UUID         string       `json:"uuid,omitempty"`
+	BackupTarget backupTarget `json:"backupTarget,omitempty"`
 }
 
 type locationInput struct {
-	UUID     string `json:"uuid,omitempty"`
-	Location string `json:"location,omitempty"`
+	UUID         string       `json:"uuid,omitempty"`
+	Location     string       `json:"location,omitempty"`
+	BackupTarget backupTarget `json:"backupTarget,omitempty"`
 }
 
 type snapshot struct {
@@ -224,4 +227,16 @@ type status struct {
 	client.Resource
 	State   string `json:"state,omitempty"`
 	Message string `json:"message,omitempty"`
+}
+
+type backupTarget struct {
+	Name      string    `json:"name,omitempty"`
+	UUID      string    `json:"uuid,omitempty"`
+	NFSConfig nfsConfig `json:"nfsConfig,omitempty"`
+}
+
+type nfsConfig struct {
+	Server       string `json:"server"`
+	Share        string `json:"share"`
+	MountOptions string `json:"mountOptions"`
 }
