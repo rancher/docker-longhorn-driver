@@ -7,14 +7,12 @@ replica:
     image: {{if .ReplicaBaseImage}}{{.ReplicaBaseImage}}{{else}}$IMAGE{{end}}
     entrypoint:
     {{if .ReplicaBaseImage -}}
-    - /cmd/launch-replica-with-vm-backing-file
+    - /cmd/launch-with-vm-backing-file
     {{else -}}
     - longhorn
     {{end -}}
     command:
-    {{if not .ReplicaBaseImage -}}
     - replica
-    {{end -}}
     - --listen
     - 0.0.0.0:9502
     - --sync-agent=false
@@ -70,13 +68,18 @@ replica-binary:
 {{- end}}
 
 sync-agent:
-    image: $IMAGE
+    image: {{if .ReplicaBaseImage}}{{.ReplicaBaseImage}}{{else}}$IMAGE{{end}}
+    entrypoint:
+    {{if .ReplicaBaseImage -}}
+    - /cmd/launch-with-vm-backing-file
+    {{else -}}
+    - longhorn
+    {{end -}}
     net: container:replica
     working_dir: /volume/$VOLUME_NAME
     volumes_from:
     - replica
     command:
-    - longhorn
     - sync-agent
     - --listen
     - 0.0.0.0:9504
