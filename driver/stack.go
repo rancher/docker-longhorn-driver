@@ -27,7 +27,7 @@ var composeTemplate *template.Template
 func init() {
 	tmplt, err := template.New("compose").Parse(DockerComposeTemplate)
 	if err != nil {
-		logrus.Panicf("Error parsing compose tempalte: %v", err)
+		logrus.Panicf("Error parsing compose template: %v", err)
 	}
 
 	composeTemplate = tmplt

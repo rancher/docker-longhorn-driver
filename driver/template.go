@@ -24,6 +24,14 @@ replica:
     volumes_from:
     - replica-binary
     {{end -}}
+    {{- if (ne .ReadIOPS "") -}}
+    device_read_iops:
+        DEFAULT_DISK: {{.ReadIOPS}}
+    {{end -}}
+    {{- if (ne .WriteIOPS "") -}}
+    device_write_iops:
+        DEFAULT_DISK: {{.WriteIOPS}}
+    {{end -}}
     labels:
         io.rancher.sidekicks: replica-api, sync-agent{{if .ReplicaBaseImage}}, replica-binary{{end}}
         io.rancher.container.hostname_override: container_name
