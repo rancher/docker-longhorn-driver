@@ -9,7 +9,7 @@ import (
 )
 
 func WaitFor(client *rancherClient.RancherClient, resource *rancherClient.Resource, output interface{}, transitioning func() string) error {
-	return util.Backoff(5*time.Minute, fmt.Sprintf("Failed waiting for %s:%s", resource.Type, resource.Id), func() (bool, error) {
+	return util.Backoff(60*time.Minute, fmt.Sprintf("Failed waiting for %s:%s", resource.Type, resource.Id), func() (bool, error) {
 		err := client.Reload(resource, output)
 		if err != nil {
 			return false, err
