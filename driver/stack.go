@@ -14,7 +14,7 @@ import (
 
 const (
 	retryInterval          = 2 * time.Second
-	retryMax               = 200
+	retryMax               = 1800
 	composeAffinityLabel   = "io.rancher.scheduler.affinity:container"
 	composeVolumeName      = "VOLUME_NAME"
 	composeVolumeSize      = "VOLUME_SIZE"
