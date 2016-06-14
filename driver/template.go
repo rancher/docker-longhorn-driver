@@ -33,6 +33,7 @@ replica:
         DEFAULT_DISK: {{.WriteIOPS}}
     {{end -}}
     labels:
+        io.rancher.container.system: Longhorn
         io.rancher.sidekicks: replica-api, sync-agent{{if .ReplicaBaseImage}}, replica-binary{{end}}
         io.rancher.container.hostname_override: container_name
         io.rancher.scheduler.affinity:container_label_ne: io.rancher.stack_service.name=$${stack_name}/$${service_name}
@@ -70,6 +71,7 @@ replica-binary:
     volumes:
     - /cmd
     labels:
+        io.rancher.container.system: Longhorn
         io.rancher.container.start_once: true
         {{- if (and (ne .SizeGB "0") (ne .SizeGB "")) }}
         io.rancher.resource.disksize.{{.Name}}: {{.SizeGB}}
@@ -98,6 +100,8 @@ sync-agent:
     - sync-agent
     - --listen
     - 0.0.0.0:9504
+    labels:
+        io.rancher.container.system: Longhorn
 
 replica-api:
     image: $IMAGE
@@ -113,6 +117,8 @@ replica-api:
     command:
     - longhorn-agent
     - --replica
+    labels:
+        io.rancher.container.system: Longhorn
 
 controller:
     image: $IMAGE
@@ -129,6 +135,7 @@ controller:
     - /dev:/host/dev
     - /lib/modules:/lib/modules:ro
     labels:
+        io.rancher.container.system: Longhorn
         io.rancher.sidekicks: controller-agent
         io.rancher.container.hostname_override: container_name
         io.rancher.scheduler.affinity:container: $DRIVER_CONTAINER
@@ -154,5 +161,7 @@ controller-agent:
     command:
     - longhorn-agent
     - --controller
+    labels:
+        io.rancher.container.system: Longhorn
 `
 )
