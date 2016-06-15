@@ -49,12 +49,17 @@ func (h *volumeHandlers) RestoreFromBackup(event *revents.Event, cli *client.Ran
 		return err
 	}
 
-	volClient := newVolumeClient(&backup.Snapshot)
+	pd := &processData{}
+	if err = decodeEvent(event, "processData", pd); err != nil {
+		return err
+	}
+
+	volClient := newVolumeClientFromName(pd.VolumeName)
 
 	logrus.Infof("Restoring from backup %v", backup.UUID)
 
 	target := newBackupTarget(backup)
-	status, err := volClient.restoreFromBackup(backup.UUID, backup.URI, target)
+	status, err := volClient.restoreFromBackup(pd.ProcessID, backup.URI, target)
 	if err != nil {
 		return err
 	}
