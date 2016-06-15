@@ -13,7 +13,11 @@ import (
 )
 
 func newVolumeClient(snapshot *eventSnapshot) *volumeClient {
-	url := fmt.Sprintf("http://controller.%v.rancher.internal/v1", util.VolumeToStackName(snapshot.Volume.Name))
+	return newVolumeClientFromName(snapshot.Volume.Name)
+}
+
+func newVolumeClientFromName(volumeName string) *volumeClient {
+	url := fmt.Sprintf("http://controller.%v.rancher.internal/v1", util.VolumeToStackName(volumeName))
 	return &volumeClient{
 		baseURL: url,
 	}

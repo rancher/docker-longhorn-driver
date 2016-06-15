@@ -92,6 +92,11 @@ func decodeEvent(event *revents.Event, key string, target interface{}) error {
 	return fmt.Errorf("Event doesn't contain %v data. Event: %#v.", key, event)
 }
 
+type processData struct {
+	ProcessID  string `mapstructure:"processId"`
+	VolumeName string
+}
+
 type eventBackup struct {
 	UUID         string
 	URI          string
