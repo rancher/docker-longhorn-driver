@@ -111,12 +111,10 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (d *StorageDaemon) List() ([]*model.Volume, error) {
-	logrus.Infof("Listing volumes")
 	return d.store.list()
 }
 
 func (d *StorageDaemon) Get(name string) (*model.Volume, error) {
-	logrus.Infof("Getting volume %v", name)
 	vol, _, moved, err := d.store.get(name)
 
 	if moved {
