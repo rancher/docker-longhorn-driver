@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -163,6 +164,7 @@ func (d *StorageDaemon) Create(volume *model.Volume) (*model.Volume, error) {
 		return nil, fmt.Errorf("Error creating Rancher stack for volume %v: %v.", volume.Name, err)
 	}
 
+	logrus.Infof("Successfully created volume %v.", volume.Name)
 	return volume, nil
 }
 
@@ -189,15 +191,16 @@ func (d *StorageDaemon) doCreateVolume(volume *model.Volume, stack *stack) error
 			logrus.Infof("Skipping formatting for volume %v.", volume.Name)
 		} else {
 			logrus.Infof("Formatting volume %v - %v", volume.Name, dev)
-			if _, err := util.Execute("mkfs.ext4", []string{"-F", dev}); err != nil {
-				return err
+			cmd := exec.Command("mkfs.ext4", "-F", dev)
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("Error running mkfs command: %v", err)
 			}
 		}
-	}
-
-	if err := stack.moveController(); err != nil {
-		logrus.Errorf("Failed to move controller to %v: %v", d.driverContainerName, err)
-		return err
+	} else {
+		if err := stack.moveController(); err != nil {
+			logrus.Errorf("Failed to move controller to %v: %v", d.driverContainerName, err)
+			return err
+		}
 	}
 
 	return nil
