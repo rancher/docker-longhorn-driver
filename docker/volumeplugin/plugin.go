@@ -60,7 +60,9 @@ func (d RancherStorageDriver) Get(request volume.Request) volume.Response {
 	}
 
 	if vol == nil {
-		return errorToResponse(fmt.Errorf("No such volume"))
+		return volume.Response{
+			Err: "No such volume",
+		}
 	}
 
 	return volToResponse(vol)
