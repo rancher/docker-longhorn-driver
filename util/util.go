@@ -10,8 +10,9 @@ import (
 	"github.com/docker/go-units"
 
 	"crypto/md5"
-	"github.com/rancher/go-rancher-metadata/metadata"
 	"strings"
+
+	"github.com/rancher/go-rancher-metadata/metadata"
 )
 
 const (
@@ -145,4 +146,20 @@ func Backoff(maxDuration time.Duration, timeoutMessage string, f func() (bool, e
 			waitTime = maxWaitTime
 		}
 	}
+}
+
+func MapInterfaceToMapString(data map[string]interface{}) map[string]string {
+	result := map[string]string{}
+	for k, v := range data {
+		result[k] = fmt.Sprint(v)
+	}
+	return result
+}
+
+func MapStringToMapInterface(data map[string]string) map[string]interface{} {
+	result := map[string]interface{}{}
+	for k, v := range data {
+		result[k] = v
+	}
+	return result
 }

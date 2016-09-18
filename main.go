@@ -9,6 +9,7 @@ import (
 	"github.com/rancher/kubernetes-agent/healthcheck"
 
 	"github.com/rancher/docker-longhorn-driver/docker/volumeplugin"
+	"github.com/rancher/docker-longhorn-driver/flex"
 	"github.com/rancher/docker-longhorn-driver/storagepool"
 )
 
@@ -55,7 +56,7 @@ func main() {
 		},
 	}
 
-	commands := []cli.Command{volumeplugin.Command, storagepool.Command}
+	commands := []cli.Command{volumeplugin.Command, storagepool.Command, flex.Command}
 	app.Commands = commands
 
 	go func() {

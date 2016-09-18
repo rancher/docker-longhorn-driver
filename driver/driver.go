@@ -219,6 +219,11 @@ func (d *StorageDaemon) Delete(name string, removeStack bool) error {
 	return nil
 }
 
+func (d *StorageDaemon) WaitForDevice(name string) (string, error) {
+	dev := getDevice(name)
+	return dev, waitForDevice(dev)
+}
+
 func (d *StorageDaemon) Mount(name string) (*model.Volume, error) {
 	logrus.Infof("Mounting volume %v", name)
 
@@ -574,6 +579,9 @@ type volumeConfig struct {
 	ReplicaBaseImage string `json:"replicaBaseImage,omitempty" mapstructure:"replicaBaseImage"`
 	DontFormat       bool   `json:"dontFormat,omitempty" mapstructure:"dontFormat"`
 }
+
+// VolumeConfig TODO: don't be so lazy
+type VolumeConfig volumeConfig
 
 func (v volumeConfig) JSON() string {
 	j, err := json.Marshal(v)
